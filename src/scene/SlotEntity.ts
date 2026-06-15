@@ -190,6 +190,14 @@ export class SlotEntity {
       }
     });
 
+    // Münz-Blase über dem Tier platzieren – Höhe richtet sich nach der Tiergröße
+    // (Oberkante der Bounding-Box + Abstand). Vor dem Einhängen messen, damit die
+    // Box in der lokalen Tier-Höhe liegt (Füße bei y=0).
+    this.animal.updateWorldMatrix(true, true);
+    const animalTop = new THREE.Box3().setFromObject(this.animal).max.y;
+    this.bubbleBaseY = Math.max(animalTop + 0.2, 1.5);
+    this.coin.position.y = this.bubbleBaseY;
+
     if (model) {
       const clips = this.models.getClips(def.id);
       const idle = pickIdle(clips);
