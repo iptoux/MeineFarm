@@ -1,0 +1,133 @@
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+
+/**
+ * Kapselt Renderer, Scene, Kamera, Steuerung und Licht.
+ * Stellt scene/camera/renderer für andere Module bereit und rendert pro Frame.
+ */
+export class SceneManager {
+  readonly scene = new THREE.Scene();
+  readonly camera: THREE.PerspectiveCamera;
+  readonly renderer: THREE.WebGLRenderer;
+  readonly controls: OrbitControls;
+
+  /** Geschwindigkeit der WASD-Bewegung (Welt-Einheiten/Sekunde). */
+  private panSpeed = 12;
+  private keys = new Set<string>();
+  private fadeMeshes: THREE.Mesh[] = [];
+  private lastTime = performance.now();
+
+  constructor(canvas: HTMLCanvasElement) {
+    this.scene.background = new THREE.Color(0x87ceeb); // Himmelblau
+
+    this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
+    this.camera.position.set(9, 6, 14);
+
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
+    this.controls.minDistance = 6;
+    this.controls.maxDistance = 40;
+    this.controls.maxPolarAngle = Math.PI / 2 - 0.05; // nicht unter den Boden schauen
+    this.controls.target.set(0, 1.2, 0);
+
+    this.setupLights();
+
+    window.addEventListener("resize", this.onResize);
+    window.addEventListener("keydown", this.onKeyDown);
+    window.addEventListener("keyup", this.onKeyUp);
+  }
+
+  /** Registriert Meshes (z.B. Dach), die beim Nah-Zoomen transparent werden. */
+  setFadeOnZoom(meshes: THREE.Mesh[]): void {
+    this.fadeMeshes = meshes;
+  }
+
+  private onKeyDown = (e: KeyboardEvent): void => {
+    const k = e.key.toLowerCase();
+    if (k === "w" || k === "a" || k === "s" || k === "d") this.keys.add(k);
+  };
+
+  private onKeyUp = (e: KeyboardEvent): void => {
+    this.keys.delete(e.key.toLowerCase());
+  };
+
+  /** WASD verschiebt Kamera + Zielpunkt entlang des Bodens (Panning). */
+  private updatePan(dt: number): void {
+    if (this.keys.size === 0) return;
+    const forward = new THREE.Vector3();
+    this.camera.getWorldDirection(forward);
+    forward.y = 0;
+    if (forward.lengthSq() < 1e-6) return;
+    forward.normalize();
+    const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize();
+
+    const move = new THREE.Vector3();
+    if (this.keys.has("w")) move.add(forward);
+    if (this.keys.has("s")) move.sub(forward);
+    if (this.keys.has("d")) move.add(right);
+    if (this.keys.has("a")) move.sub(right);
+    if (move.lengthSq() === 0) return;
+    move.normalize().multiplyScalar(this.panSpeed * dt);
+
+    this.camera.position.add(move);
+    this.controls.target.add(move);
+  }
+
+  /** Blendet das Dach abhängig vom Zoom-Abstand aus (nah = durchsichtig). */
+  private updateFade(): void {
+    if (this.fadeMeshes.length === 0) return;
+    const dist = this.controls.getDistance();
+    // weit (>=14) volldeckend, nah (<=8) fast transparent
+    const t = THREE.MathUtils.clamp((dist - 8) / (14 - 8), 0, 1);
+    const opacity = 0.12 + 0.88 * t;
+    for (const mesh of this.fadeMeshes) {
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      mat.opacity = opacity;
+      mat.depthWrite = opacity > 0.95;
+    }
+  }
+
+  private setupLights(): void {
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7d3a, 1.0);
+    this.scene.add(hemi);
+
+    // Sanftes Fülllicht, damit das Stallinnere im Dachschatten lesbar bleibt
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+
+    const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+    sun.position.set(12, 18, 8);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    const d = 25;
+    sun.shadow.camera.left = -d;
+    sun.shadow.camera.right = d;
+    sun.shadow.camera.top = d;
+    sun.shadow.camera.bottom = -d;
+    sun.shadow.camera.far = 60;
+    this.scene.add(sun);
+  }
+
+  private onResize = (): void => {
+    this.camera.aspect = window.innerWidth / window.innerHeight;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+  };
+
+  render(): void {
+    const now = performance.now();
+    const dt = Math.min((now - this.lastTime) / 1000, 0.1);
+    this.lastTime = now;
+
+    this.updatePan(dt);
+    this.updateFade();
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+  }
+}

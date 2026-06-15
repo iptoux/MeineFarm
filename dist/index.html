@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MeinHaustier — Tierfarm-Tycoon</title>
+    <script type="module" crossorigin src="/assets/index-CL0dyf3p.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BXEvbt0g.css">
+  </head>
+  <body>
+    <canvas id="game-canvas"></canvas>
+
+    <!-- HUD: Geldanzeige + Ton -->
+    <div id="hud">
+      <img id="money-icon" alt="" />
+      <span id="hud-money">0 €</span>
+    </div>
+    <button id="mute-btn" title="Ton an/aus">🔊</button>
+
+    <!-- Hinweistext -->
+    <div id="hint">Münze anklicken zum Ernten · Tier anklicken zum Verkaufen · Gebäude rechtsklicken für Optionen · WASD bewegt die Kamera</div>
+
+    <!-- Kontextmenüs (werden per JS positioniert/gefüllt) -->
+    <div id="slot-menu" class="hidden"></div>
+    <div id="building-menu" class="hidden"></div>
+    <div id="animal-menu" class="hidden"></div>
+
+    <!-- Globales Bau-Menü (unten zentriert) -->
+    <div id="build-menu"></div>
+
+  </body>
+</html>

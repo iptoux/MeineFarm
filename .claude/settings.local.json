@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm dev *)",
+      "Bash(node scripts/_verify.mjs)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(kill %1)",
+      "Bash(pnpm build *)",
+      "Bash(node -e ' *)",
+      "Bash(node scripts/_probe.mjs)"
+    ]
+  }
+}
