@@ -5,6 +5,8 @@ import { createGround } from "./scene/Ground";
 import { createGrass } from "./scene/Grass";
 import { SkyManager } from "./scene/Sky";
 import { CloudManager } from "./scene/Clouds";
+import { RainSystem } from "./scene/Rain";
+import { WeatherManager } from "./scene/Weather";
 import { AnimalModels } from "./scene/AnimalModels";
 import { renderIcon } from "./scene/IconRenderer";
 import { CoinBurst } from "./scene/CoinBurst";
@@ -56,6 +58,21 @@ async function init(): Promise<void> {
   const audio = new AudioManager();
   const dayNight = new DayNightHud();
 
+  // Wetter: Regen-Partikel + Wettersteuerung (moduliert Licht/Fog/Wolken)
+  const rain = new RainSystem(sceneManager.scene, sceneManager.camera);
+  const weather = new WeatherManager({
+    scene: sceneManager.scene,
+    camera: sceneManager.camera,
+    renderer: sceneManager.renderer,
+    sky,
+    sun: sceneManager.sun,
+    hemi: sceneManager.hemi,
+    ambient: sceneManager.ambient,
+    clouds,
+    rain,
+    audio,
+  });
+
   // HUD-Geld-Icon aus dem Münzhaufen-Modell rendern
   const pile = models.getCoinPile();
   if (pile) {
@@ -101,8 +118,11 @@ async function init(): Promise<void> {
     coinBurst.update(dt);
     grass.update(tSec);
     sky.update(dt);
+    weather.update(dt, sky.timeOfDay, sky.daylight);
     clouds.update(dt, sky.daylight);
+    rain.update(dt);
     dayNight.update(sky.timeOfDay);
+    dayNight.setWeather(weather.target);
   }).start();
 
   // Debug-Hook (nur Dev): erlaubt Inspektion im automatisierten Test
@@ -111,6 +131,7 @@ async function init(): Promise<void> {
       rig,
       sceneManager,
       sky,
+      weather,
       grass,
       get session() {
         return session;

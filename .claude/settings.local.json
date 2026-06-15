@@ -44,7 +44,25 @@
       "Read(//c/Users/quork/AppData/Local/ms-playwright/**)",
       "PowerShell($env:BROWSER='none'; Start-Job -Name vite -ScriptBlock { Set-Location 'c:\\\\Users\\\\quork\\\\Entwicklung\\\\MeinHaustier'; $env:BROWSER='none'; pnpm preview --port 4173 } | Out-Null; Start-Sleep -Seconds 3; \\(Invoke-WebRequest -UseBasicParsing http://localhost:4173/ -TimeoutSec 5\\).StatusCode)",
       "PowerShell(Get-Job)",
-      "PowerShell(Receive-Job -Name vite -Keep 2>&1)"
+      "PowerShell(Receive-Job -Name vite -Keep 2>&1)",
+      "Bash(npx tsc *)",
+      "Bash(pnpm exec *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(pnpm run *)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(curl -sL -A \"Mozilla/5.0\" https://mixkit.co/free-sound-effects/rain/ -o /tmp/rain.html)",
+      "Bash(echo \"exit=$? size=$\\(wc -c </tmp/rain.html \\)\")",
+      "Bash(python3 -)",
+      "Bash(cp /tmp/rain.html ./.wx-rain.html)",
+      "Bash(curl -sL -A \"Mozilla/5.0\" https://mixkit.co/free-sound-effects/thunder/ -o .wx-thunder.html)",
+      "Bash(curl -sL -A \"Mozilla/5.0\" https://mixkit.co/free-sound-effects/storm/ -o .wx-storm.html)",
+      "Bash(sed -i 's#http://localhost:5173/#http://localhost:5174/#' verify-weather.cjs)",
+      "Bash(node verify-weather.cjs)",
+      "Bash(echo \"tsc exit=$?\")",
+      "Bash(rm -f .wx-*.png .wx-shot.cjs .wx-shot2.cjs verify-weather.cjs)",
+      "Bash(pkill -f \"vite --port 5174\")",
+      "Bash(pkill -f vite)",
+      "Bash(cd /c/Users/quork/Entwicklung/MeinHaustier *)"
     ]
   }
 }

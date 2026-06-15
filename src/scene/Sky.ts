@@ -75,6 +75,20 @@ export class SkyManager {
     this.apply();
   }
 
+  /**
+   * Trübt den atmosphärischen Himmel ein (0 = klar blau, 1 = milchig-grau).
+   * Vom WeatherManager nach `update()` gesetzt: weniger Blau-Streuung + mehr
+   * Dunst lässt den Himmel bei Regen/Sturm/Nebel bedeckt statt sonnig wirken.
+   * (apply() schreibt diese Uniforms nicht, daher konfliktfrei.)
+   */
+  setOvercast(amount: number): void {
+    const a = THREE.MathUtils.clamp(amount, 0, 1);
+    const u = this.sky.material.uniforms;
+    u.turbidity.value = THREE.MathUtils.lerp(10, 28, a);
+    u.rayleigh.value = THREE.MathUtils.lerp(3.5, 0.4, a);
+    u.mieCoefficient.value = THREE.MathUtils.lerp(0.005, 0.02, a);
+  }
+
   private apply(): void {
     // Sonnenstand aus der Tageszeit: Horizont bei 0.25/0.75, Hochstand bei 0.5.
     const elevation = MAX_ELEVATION * Math.sin(2 * Math.PI * (this.timeOfDay - 0.25));

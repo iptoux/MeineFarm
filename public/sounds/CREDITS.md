@@ -15,3 +15,6 @@ Attribution erforderlich).
 - `animals/schaf.mp3` — „Sheep sounds" (SFX #1741) — Schaf-Ruf
 - `animals/kuh.mp3` — „Cow single moo" (SFX #1747) — Kuh-Ruf
 - `animals/pferd.mp3` — „Stallion horse neigh" (SFX #1762) — Pferd-Ruf
+- `rain.mp3` — „Rain long loop" (SFX #2394) — Regen-Geräuschkulisse (Loop)
+- `storm.mp3` — „Storm wind" (SFX #2411) — Sturm/Wind beim Gewitter (Loop)
+- `thunder.mp3` — „Strong close thunder explosion" (SFX #1300) — Donnerschlag
