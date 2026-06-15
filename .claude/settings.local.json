@@ -7,7 +7,21 @@
       "Bash(kill %1)",
       "Bash(pnpm build *)",
       "Bash(node -e ' *)",
-      "Bash(node scripts/_probe.mjs)"
+      "Bash(node scripts/_probe.mjs)",
+      "PowerShell(npx tsc --noEmit)",
+      "PowerShell(if \\(Test-Path node_modules/.bin/tsc.cmd\\) { \"tsc exists\" } else { \"no tsc\" }; if \\(Get-Command pnpm -ErrorAction SilentlyContinue\\) { \"pnpm available: \" + \\(pnpm --version\\) } else { \"no pnpm\" })",
+      "PowerShell(pnpm exec tsc --noEmit)",
+      "PowerShell(pnpm run build)",
+      "Bash(node tmp_shot.mjs)",
+      "Bash(rm -f tmp_shot.mjs tmp_day.png tmp_dawn.png tmp_night.png)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(rm -f tmp_shot.mjs tmp_cull.png tmp_overview.png tmp_closegrass.png)",
+      "Bash(rm -f tmp_shot.mjs tmp_overview.png tmp_closegrass.png tmp_night_hud.png)",
+      "Bash(node tmp_diag.mjs)",
+      "PowerShell(if \\($?\\) { \"OK\" })",
+      "PowerShell(pnpm run build 2>&1)",
+      "Bash(rm -f tmp_diag.mjs diag_*.png)",
+      "PowerShell(if \\($?\\) { \"TS OK\" })"
     ]
   }
 }

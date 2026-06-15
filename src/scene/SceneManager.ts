@@ -11,6 +11,11 @@ export class SceneManager {
   readonly renderer: THREE.WebGLRenderer;
   readonly controls: OrbitControls;
 
+  /** Lichter werden vom SkyManager pro Frame an die Tageszeit angepasst. */
+  readonly hemi!: THREE.HemisphereLight;
+  readonly ambient!: THREE.AmbientLight;
+  readonly sun!: THREE.DirectionalLight;
+
   /** Geschwindigkeit der WASD-Bewegung (Welt-Einheiten/Sekunde). */
   private panSpeed = 12;
   private keys = new Set<string>();
@@ -18,7 +23,10 @@ export class SceneManager {
   private lastTime = performance.now();
 
   constructor(canvas: HTMLCanvasElement) {
-    this.scene.background = new THREE.Color(0x87ceeb); // Himmelblau
+    this.scene.background = new THREE.Color(0x87ceeb); // Himmelblau (Fallback, vom Sky überdeckt)
+    // Dunst am Horizont: blendet die Bodenkante zum Himmel über. Farbe animiert
+    // der SkyManager pro Frame an die Tageszeit.
+    this.scene.fog = new THREE.Fog(0x87ceeb, 70, 180);
 
     this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
     this.camera.position.set(9, 6, 14);
@@ -28,6 +36,11 @@ export class SceneManager {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Tone-Mapping für saubere Farbverläufe des atmosphärischen Sky.
+    // Neutral (Khronos PBR) entsättigt weniger als ACES → der Himmel bleibt
+    // satt blau statt blass auszuwaschen.
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.toneMappingExposure = 0.85;
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -97,9 +110,12 @@ export class SceneManager {
   private setupLights(): void {
     const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7d3a, 1.0);
     this.scene.add(hemi);
+    (this as { hemi: THREE.HemisphereLight }).hemi = hemi;
 
     // Sanftes Fülllicht, damit das Stallinnere im Dachschatten lesbar bleibt
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+    const ambient = new THREE.AmbientLight(0xffffff, 0.45);
+    this.scene.add(ambient);
+    (this as { ambient: THREE.AmbientLight }).ambient = ambient;
 
     const sun = new THREE.DirectionalLight(0xffffff, 1.1);
     sun.position.set(12, 18, 8);
@@ -111,7 +127,11 @@ export class SceneManager {
     sun.shadow.camera.top = d;
     sun.shadow.camera.bottom = -d;
     sun.shadow.camera.far = 60;
+    // Sonne folgt der Tageszeit -> Schatten-Frustum dem Kamerafokus nachführen.
+    sun.target.position.set(0, 0, 0);
+    this.scene.add(sun.target);
     this.scene.add(sun);
+    (this as { sun: THREE.DirectionalLight }).sun = sun;
   }
 
   private onResize = (): void => {

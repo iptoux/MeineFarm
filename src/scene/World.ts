@@ -2,11 +2,15 @@ import * as THREE from "three";
 import type { GameState } from "../game/GameState";
 import { getAnimal } from "../game/config/animals";
 import { getBuilding } from "../game/config/buildings";
-import { ROAD_TILE, getRoad, roadCellCenter } from "../game/config/roads";
+import { ROAD_TILE, getRoad, roadCellCenter, worldToCell } from "../game/config/roads";
 import { tickPending } from "../game/economy";
 import { createBuilding, createModelBuilding } from "./Building";
 import { SlotEntity, type PickData } from "./SlotEntity";
 import type { AnimalModels } from "./AnimalModels";
+import type { Grass } from "./Grass";
+
+/** Sicherheitsabstand um Gebäude-Grundflächen, in dem kein Gras wächst. */
+const GRASS_BUILD_MARGIN = 0.6;
 
 /**
  * Verwaltet die sichtbare Welt: Gebäude-Meshes + ihre Slot-Entities und die
@@ -28,6 +32,7 @@ export class World {
     private scene: THREE.Scene,
     private state: GameState,
     private models: AnimalModels,
+    private grass?: Grass,
   ) {
     this.scene.add(this.roadGroup);
     this.rebuild();
@@ -74,6 +79,8 @@ export class World {
       this.scene.add(entity.group);
       this.entities[base + local] = entity;
     });
+
+    this.cullGrass();
   }
 
   /** Baut die Straßen-Kacheln neu auf (bei jeder Änderung). */
@@ -88,6 +95,29 @@ export class World {
       tile.receiveShadow = true;
       this.roadGroup.add(tile);
     }
+    this.cullGrass();
+  }
+
+  /** Blendet Gras unter Gebäuden/Straßen aus (und anderswo wieder ein). */
+  private cullGrass(): void {
+    this.grass?.setOccupancy((x, z) => this.isOccupied(x, z));
+  }
+
+  /** Liegt der Welt-Punkt auf einer Straßen-Kachel oder Gebäude-Grundfläche? */
+  private isOccupied(x: number, z: number): boolean {
+    const { gx, gz } = worldToCell(x, z);
+    if (this.state.hasRoad(gx, gz)) return true;
+
+    for (const b of this.state.buildings) {
+      const def = getBuilding(b.defId);
+      if (!def) continue;
+      // Drehung um 90°/270° tauscht Breite und Tiefe.
+      const rotated = Math.abs(Math.sin(b.rotation)) > 0.5;
+      const hw = (rotated ? def.depth : def.width) / 2 + GRASS_BUILD_MARGIN;
+      const hd = (rotated ? def.width : def.depth) / 2 + GRASS_BUILD_MARGIN;
+      if (Math.abs(x - b.x) <= hw && Math.abs(z - b.z) <= hd) return true;
+    }
+    return false;
   }
 
   /** Material pro Straßentyp (gecacht). */

@@ -2,6 +2,8 @@ import "./ui/styles.css";
 
 import { SceneManager } from "./scene/SceneManager";
 import { createGround } from "./scene/Ground";
+import { createGrass } from "./scene/Grass";
+import { SkyManager } from "./scene/Sky";
 import { World } from "./scene/World";
 import { AnimalModels } from "./scene/AnimalModels";
 import { renderIcon } from "./scene/IconRenderer";
@@ -16,6 +18,7 @@ import { getBuilding } from "./game/config/buildings";
 import { getRoad } from "./game/config/roads";
 
 import { Hud } from "./ui/Hud";
+import { DayNightHud } from "./ui/DayNightHud";
 import { SlotMenu } from "./ui/SlotMenu";
 import { BuildMenu } from "./ui/BuildMenu";
 import { BuildingMenu } from "./ui/BuildingMenu";
@@ -32,6 +35,18 @@ async function init(): Promise<void> {
   const sceneManager = new SceneManager(canvas);
   sceneManager.scene.add(createGround());
 
+  // Dynamischer Himmel + Tag/Nacht-Zyklus (steuert die Szenen-Lichter)
+  const sky = new SkyManager(
+    sceneManager.scene,
+    sceneManager.sun,
+    sceneManager.hemi,
+    sceneManager.ambient,
+  );
+
+  // Animiertes Wind-Gras (prozeduraler Teppich + GLB-Büschel)
+  const grass = await createGrass();
+  sceneManager.scene.add(grass.object);
+
   // Spielzustand + gespeicherten Stand laden (Offline-Gutschrift inklusive)
   const state = new GameState();
   const saveManager = new SaveManager(state);
@@ -42,7 +57,7 @@ async function init(): Promise<void> {
   await models.load();
 
   // Welt aus dem Zustand aufbauen (Gebäude + Slot-Entities + Straßen)
-  const world = new World(sceneManager.scene, state, models);
+  const world = new World(sceneManager.scene, state, models, grass);
   sceneManager.setFadeOnZoom(world.roofMeshes);
 
   // Effekte & Audio
@@ -51,6 +66,7 @@ async function init(): Promise<void> {
 
   // UI
   new Hud(state);
+  const dayNight = new DayNightHud();
   const slotMenu = new SlotMenu(state, audio);
 
   // HUD-Geld-Icon aus dem Münzhaufen-Modell rendern
@@ -156,6 +172,9 @@ async function init(): Promise<void> {
   new Game(sceneManager, (dt, tSec) => {
     world.update(dt, tSec);
     coinBurst.update(dt);
+    grass.update(tSec);
+    sky.update(dt);
+    dayNight.update(sky.timeOfDay);
   }).start();
 
   // Debug-Hook (nur Dev): erlaubt Inspektion im automatisierten Test
@@ -168,6 +187,8 @@ async function init(): Promise<void> {
       roadController,
       audio,
       models,
+      sky,
+      grass,
     };
   }
 }

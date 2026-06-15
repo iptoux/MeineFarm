@@ -4,8 +4,6 @@ import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.j
 import { ANIMALS } from "../game/config/animals";
 import { BUILDINGS } from "../game/config/buildings";
 
-/** Einheitliche Zielgröße: längste Bounding-Box-Kante in Welt-Einheiten. */
-const ANIMAL_SIZE = 1.4;
 const COIN_SIZE = 0.7;
 
 const COIN_URL = "/models/ui/Coin.glb";
@@ -29,7 +27,7 @@ export class AnimalModels {
       ...ANIMALS.map(async (def) => {
         try {
           const gltf = await loader.loadAsync(def.model);
-          this.templates.set(def.id, this.normalize(gltf.scene, ANIMAL_SIZE, true));
+          this.templates.set(def.id, this.normalize(gltf.scene, def.size, true));
           this.clips.set(def.id, gltf.animations ?? []);
         } catch {
           // ohne Modell greift später der Platzhalter-Fallback
