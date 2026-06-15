@@ -117,7 +117,7 @@ export class World {
   }
 
   /** Blendet Gras unter Gebäuden/Straßen aus (und anderswo wieder ein). */
-  private cullGrass(): void {
+  cullGrass(): void {
     this.grass?.setOccupancy((x, z, r) => this.isOccupied(x, z, r));
   }
 

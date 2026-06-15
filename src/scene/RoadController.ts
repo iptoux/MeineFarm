@@ -95,6 +95,7 @@ export class RoadController {
     const c = roadCellCenter(cell.gx, cell.gz);
     this.ghost.position.set(c.x, 0.06, c.z);
     if (this.state.hasRoad(cell.gx, cell.gz)) this.ghostMat.color.copy(REMOVE);
+    else if (!this.state.roadCellInField(cell.gx, cell.gz)) this.ghostMat.color.copy(BLOCKED);
     else this.ghostMat.color.copy(this.state.canAfford(this.roadDef.cost) ? PLACE : BLOCKED);
   };
 
@@ -105,6 +106,8 @@ export class RoadController {
     if (this.state.hasRoad(cell.gx, cell.gz)) {
       this.state.removeRoad(cell.gx, cell.gz);
       this.handlers.onChanged();
+    } else if (!this.state.roadCellInField(cell.gx, cell.gz)) {
+      return; // außerhalb des Spielfelds → nicht baubar
     } else if (this.state.addRoad(cell.gx, cell.gz, this.roadDef.id)) {
       this.handlers.onChanged();
       this.handlers.onPlaced();

@@ -1,7 +1,16 @@
 import { getAnimal } from "./config/animals";
 import { getBuilding } from "./config/buildings";
-import { getRoad } from "./config/roads";
+import { getRoad, ROAD_TILE, roadCellCenter } from "./config/roads";
 import { STARTING_UNLOCKED, STARTING_MONEY, slotUnlockCost } from "./config/slots";
+import {
+  CHUNK,
+  INITIAL_FIELD,
+  INITIAL_SPAN,
+  MAX_HALF,
+  expansionCost,
+  type FieldBounds,
+  type FieldEdge,
+} from "./config/chunks";
 
 export interface SlotState {
   unlocked: boolean;
@@ -28,11 +37,13 @@ export interface RoadTile {
 }
 
 export interface SaveData {
-  version: 2;
+  version: 3;
   money: number;
   buildings: PlacedBuilding[];
   slots: SlotState[];
   roads: RoadTile[];
+  /** Spielfeld-Grenzen (seit v3; bei v2-Ständen fehlt es → Default). */
+  field: FieldBounds;
   lastSaveTs: number;
 }
 
@@ -53,6 +64,8 @@ export class GameState {
   buildings: PlacedBuilding[] = [];
   slots: SlotState[] = [];
   roads: RoadTile[] = [];
+  /** Erweiterbares Spielfeld (siehe config/chunks). */
+  field: FieldBounds = { ...INITIAL_FIELD };
 
   private listeners = new Set<Listener>();
 
@@ -69,7 +82,42 @@ export class GameState {
       makeSlot(i < STARTING_UNLOCKED, i === 0 ? "huhn" : null),
     );
     this.roads = [];
+    this.field = { ...INITIAL_FIELD };
     this.emit();
+  }
+
+  /** Liegt eine Grundfläche (Mittelpunkt x/z, Halbausdehnung) vollständig im Feld? */
+  inField(x: number, z: number, halfW = 0, halfD = 0): boolean {
+    const f = this.field;
+    return x - halfW >= f.minX && x + halfW <= f.maxX && z - halfD >= f.minZ && z + halfD <= f.maxZ;
+  }
+
+  /** Liegt die ganze Straßen-Kachel (gx,gz) im Feld? */
+  roadCellInField(gx: number, gz: number): boolean {
+    const c = roadCellCenter(gx, gz);
+    return this.inField(c.x, c.z, ROAD_TILE / 2, ROAD_TILE / 2);
+  }
+
+  /** Kosten, um die gegebene Kante als Nächstes zu erweitern (oder null am Limit). */
+  expandCost(edge: FieldEdge): number | null {
+    const f = this.field;
+    const span = edge === "minX" || edge === "maxX" ? f.maxX - f.minX : f.maxZ - f.minZ;
+    if (span / 2 >= MAX_HALF) return null; // Achse am Perf-Deckel
+    const n = Math.round((span - INITIAL_SPAN) / CHUNK);
+    return expansionCost(n);
+  }
+
+  /** Erweitert eine Kante um `CHUNK` (kostet `expandCost`); false wenn am Limit/zu teuer. */
+  expandField(edge: FieldEdge): boolean {
+    const cost = this.expandCost(edge);
+    if (cost === null || !this.canAfford(cost)) return false;
+    this.money -= cost;
+    if (edge === "maxX") this.field.maxX += CHUNK;
+    else if (edge === "minX") this.field.minX -= CHUNK;
+    else if (edge === "maxZ") this.field.maxZ += CHUNK;
+    else this.field.minZ -= CHUNK;
+    this.emit();
+    return true;
   }
 
   onChange(fn: Listener): () => void {
@@ -234,11 +282,12 @@ export class GameState {
 
   toSave(): SaveData {
     return {
-      version: 2,
+      version: 3,
       money: this.money,
       buildings: this.buildings,
       slots: this.slots,
       roads: this.roads,
+      field: this.field,
       lastSaveTs: Date.now(),
     };
   }

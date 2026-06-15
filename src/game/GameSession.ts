@@ -1,11 +1,14 @@
 import type { SceneManager } from "../scene/SceneManager";
 import type { AnimalModels } from "../scene/AnimalModels";
 import type { Grass } from "../scene/Grass";
+import type { Ground } from "../scene/Ground";
+import type { CloudManager } from "../scene/Clouds";
 import { CoinBurst } from "../scene/CoinBurst";
 import { World } from "../scene/World";
 import { Picker } from "../scene/Picker";
 import { PlacementController } from "../scene/PlacementController";
 import { RoadController } from "../scene/RoadController";
+import { FieldExpansion } from "../scene/FieldExpansion";
 import { CritterManager } from "../scene/Critters";
 
 import { GameState } from "./GameState";
@@ -28,6 +31,8 @@ export interface Rig {
   sceneManager: SceneManager;
   models: AnimalModels;
   grass: Grass;
+  ground: Ground;
+  clouds: CloudManager;
   coinBurst: CoinBurst;
   audio: AudioManager;
 }
@@ -47,13 +52,14 @@ export class GameSession {
   private buildingMenu: BuildingMenu;
   private placement: PlacementController;
   private roadController: RoadController;
+  private fieldExpansion: FieldExpansion;
   private ambient: AmbientAnimals;
   private critters: CritterManager;
   private abort = new AbortController();
   private stopAutosave: () => void;
 
   constructor(
-    rig: Rig,
+    private rig: Rig,
     private saveId: string,
   ) {
     const { sceneManager, models, grass, coinBurst, audio } = rig;
@@ -102,6 +108,22 @@ export class GameSession {
         onChanged: () => this.world.rebuildRoads(),
         onPlaced: () => audio.playRoad(),
       },
+    );
+
+    // Spielfeld-Erweiterung („+"-Pads an den Kanten)
+    this.fieldExpansion = new FieldExpansion(
+      sceneManager.scene,
+      sceneManager.camera,
+      sceneManager.renderer.domElement,
+      this.state,
+      {
+        onExpanded: () => {
+          this.applyField();
+          audio.playPurchase();
+        },
+      },
+      () => this.placement.active || this.roadController.active,
+      signal,
     );
 
     // Tier-Kontextmenü (Verkaufen)
@@ -172,6 +194,20 @@ export class GameSession {
     this.critters = new CritterManager(sceneManager.scene, this.state, models);
 
     this.stopAutosave = SaveManager.startAutosave(this.state, saveId);
+
+    // Boden/Gras/Wolken/Kamera an das geladene Spielfeld anpassen.
+    this.applyField();
+  }
+
+  /** Synchronisiert alle feldabhängigen Systeme mit `state.field` (nach Laden/Erweitern). */
+  private applyField(): void {
+    const f = this.state.field;
+    this.rig.ground.resize(f);
+    this.rig.grass.rebuildForField(f);
+    this.world.cullGrass(); // Belegung nach Gras-Rebuild neu anwenden
+    this.rig.clouds.setBounds(f);
+    this.fieldExpansion.reposition(f);
+    this.rig.sceneManager.setPanBounds(f);
   }
 
   /** Wird pro Frame von der Rig-Schleife aufgerufen (Produktion + Erntefortschritt). */
@@ -185,6 +221,7 @@ export class GameSession {
   dispose(): void {
     this.placement.cancel();
     this.roadController.cancel();
+    this.fieldExpansion.dispose();
     this.stopAutosave();
     SaveManager.save(this.state, this.saveId);
     this.slotMenu.close();

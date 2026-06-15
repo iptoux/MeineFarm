@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { FieldBounds } from "../game/config/chunks";
 
 /**
  * Locker über den Himmel ziehende Low-Poly-Wolken, jede mit einem weichen
@@ -11,8 +12,8 @@ import * as THREE from "three";
 
 /** Maximale Wolkenzahl im Pool; die Dichte (Wetter) blendet einen Teil davon aus. */
 const CLOUD_MAX = 42;
-/** Halber Bereich (x/z), über den Wolken verteilt sind und wrappen. */
-const SPREAD = 60;
+/** Halber Bereich (x/z), über den Wolken verteilt sind und wrappen (≥ MAX_HALF). */
+const SPREAD = 95;
 const CLOUD_HEIGHT = 28;
 /** Basis-Windgeschwindigkeit (Welt-Einheiten/Sekunde); vom Wetter skaliert. */
 const WIND = new THREE.Vector2(1.1, 0.25);
@@ -40,6 +41,8 @@ export class CloudManager {
   private targetDensity = 12 / CLOUD_MAX;
   /** Wind-Multiplikator (vom Wetter gesetzt). */
   private windMul = 1;
+  /** Spielfeld-Grenzen: Schatten außerhalb werden ausgeblendet (kein Void-Schatten). */
+  private bounds: FieldBounds | null = null;
 
   constructor(private scene: THREE.Scene) {
     this.shadowTex = makeRadialTexture();
@@ -77,6 +80,11 @@ export class CloudManager {
     this.windMul = mul;
   }
 
+  /** Spielfeld-Grenzen setzen: Schatten außerhalb werden ausgeblendet. */
+  setBounds(bounds: FieldBounds): void {
+    this.bounds = bounds;
+  }
+
   /** Verschiebt Wolken + Schatten mit dem Wind und blendet Schatten nach Tageslicht. */
   update(dt: number, daylight: number): void {
     const shadowOpacity = SHADOW_MAX_OPACITY * THREE.MathUtils.clamp(daylight, 0, 1);
@@ -95,7 +103,10 @@ export class CloudManager {
       c.vis += (targetVis - c.vis) * fade;
       const visible = c.vis > 0.01;
       c.sky.visible = visible;
-      c.shadow.visible = visible;
+      // Schatten nur auf dem Spielfeld zeigen (sonst läge er auf dem leeren Void).
+      const b = this.bounds;
+      const onField = !b || (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ);
+      c.shadow.visible = visible && onField;
       if (visible) {
         c.sky.scale.setScalar(c.vis);
         (c.shadow.material as THREE.MeshBasicMaterial).opacity = shadowOpacity * c.vis;

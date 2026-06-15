@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import type { FieldBounds } from "../game/config/chunks";
 
 /**
  * Kapselt Renderer, Scene, Kamera, Steuerung und Licht.
@@ -21,6 +22,8 @@ export class SceneManager {
   private keys = new Set<string>();
   private fadeMeshes: THREE.Mesh[] = [];
   private lastTime = performance.now();
+  /** Begrenzung für den Kamera-Zielpunkt (Spielfeld + Rand); null = unbegrenzt. */
+  private panBounds: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene.background = new THREE.Color(0x87ceeb); // Himmelblau (Fallback, vom Sky überdeckt)
@@ -62,6 +65,12 @@ export class SceneManager {
     this.fadeMeshes = meshes;
   }
 
+  /** Begrenzt das Kamera-Panning auf das Spielfeld (mit etwas Rand). */
+  setPanBounds(f: FieldBounds): void {
+    const pad = 8;
+    this.panBounds = { minX: f.minX - pad, maxX: f.maxX + pad, minZ: f.minZ - pad, maxZ: f.maxZ + pad };
+  }
+
   private onKeyDown = (e: KeyboardEvent): void => {
     const k = e.key.toLowerCase();
     if (k === "w" || k === "a" || k === "s" || k === "d") this.keys.add(k);
@@ -91,6 +100,18 @@ export class SceneManager {
 
     this.camera.position.add(move);
     this.controls.target.add(move);
+
+    // Zielpunkt im Feld halten; Kamera um dieselbe Korrektur mitziehen.
+    const b = this.panBounds;
+    if (b) {
+      const t = this.controls.target;
+      const cx = THREE.MathUtils.clamp(t.x, b.minX, b.maxX);
+      const cz = THREE.MathUtils.clamp(t.z, b.minZ, b.maxZ);
+      this.camera.position.x += cx - t.x;
+      this.camera.position.z += cz - t.z;
+      t.x = cx;
+      t.z = cz;
+    }
   }
 
   /** Blendet das Dach abhängig vom Zoom-Abstand aus (nah = durchsichtig). */

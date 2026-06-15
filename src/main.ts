@@ -1,7 +1,7 @@
 import "./ui/styles.css";
 
 import { SceneManager } from "./scene/SceneManager";
-import { createGround } from "./scene/Ground";
+import { Ground } from "./scene/Ground";
 import { createGrass } from "./scene/Grass";
 import { SkyManager } from "./scene/Sky";
 import { CloudManager } from "./scene/Clouds";
@@ -33,7 +33,8 @@ async function init(): Promise<void> {
 
   // --- Persistentes Rig: bleibt über alle Spielstände hinweg bestehen ---
   const sceneManager = new SceneManager(canvas);
-  sceneManager.scene.add(createGround());
+  const ground = new Ground();
+  sceneManager.scene.add(ground.mesh);
 
   // Dynamischer Himmel + Tag/Nacht-Zyklus (steuert die Szenen-Lichter)
   const sky = new SkyManager(
@@ -85,7 +86,7 @@ async function init(): Promise<void> {
     muteBtn.textContent = audio.toggleMute() ? "🔇" : "🔊";
   });
 
-  const rig: Rig = { sceneManager, models, grass, coinBurst, audio };
+  const rig: Rig = { sceneManager, models, grass, ground, clouds, coinBurst, audio };
 
   // --- Spiel-Session + Startmenü ---
   let session: GameSession | null = null;
@@ -133,6 +134,8 @@ async function init(): Promise<void> {
       sky,
       weather,
       grass,
+      ground,
+      clouds,
       get session() {
         return session;
       },

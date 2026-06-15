@@ -3,7 +3,6 @@ import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js
 import type { GameState } from "../game/GameState";
 import { getBuilding, type BuildingDef } from "../game/config/buildings";
 
-const FIELD_HALF = 45; // platzierbarer Bereich um den Ursprung
 const SPACING_MARGIN = 1.5; // Mindestabstand zwischen Gebäuderändern
 
 const VALID = new THREE.Color(0x4caf50);
@@ -212,7 +211,7 @@ export class PlacementController {
     if (this.mode.type === "build" && !this.state.canAfford(def.cost)) return false;
 
     const [halfW, halfD] = halfExtents(def, this.rotation);
-    if (Math.abs(x) + halfW > FIELD_HALF || Math.abs(z) + halfD > FIELD_HALF) return false;
+    if (!this.state.inField(x, z, halfW, halfD)) return false;
 
     const selfIndex = this.mode.type === "move" ? this.mode.buildingIndex : -1;
     for (let i = 0; i < this.state.buildings.length; i++) {

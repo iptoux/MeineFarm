@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { INITIAL_FIELD, type FieldBounds } from "../game/config/chunks";
 
 /**
  * Animiertes Wind-Gras auf dem Boden, aufgebaut aus instanzierten GLB-Büscheln:
@@ -19,9 +20,11 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 const GRASS_GLB = "/models/world/Grass Patch.glb";
 const GRASS_DRY_GLB = "/models/world/grass yellowing.glb";
 
-/** Halbe Kantenlänge des Streubereichs (Boden ist 120×120). */
-const AREA = 46;
 const CLUMP_HEIGHT = 0.9;
+/** Fläche des Startfeldes – die Clump-`count`-Werte gelten als Dichte hierfür. */
+const BASE_AREA = (INITIAL_FIELD.maxX - INITIAL_FIELD.minX) * (INITIAL_FIELD.maxZ - INITIAL_FIELD.minZ);
+/** Perf-Deckel: max. Instanzzahl = Basiszahl × Faktor (danach tapert die Dichte). */
+const CAP_FACTOR = 1.6;
 
 /** Eine Geometrie/Material-Kombi für instanzierte Büschel. */
 export interface ClumpSource {
@@ -46,10 +49,37 @@ export class Grass {
   readonly object = new THREE.Group();
   /** Gemeinsame Zeit-Uniform für alle Gras-Materialien. */
   private readonly uTime = { value: 0 };
-  private readonly cullables: Cullable[] = [];
+  private cullables: Cullable[] = [];
+  /** Geladene Clump-Vorlagen (Geometrie/Material), für Rebuilds wiederverwendet. */
+  private readonly sources: ClumpSource[];
 
   constructor(clumps: ClumpSource[]) {
-    for (const c of clumps) this.add(this.buildClumps(c));
+    this.sources = clumps;
+    this.rebuildForField(INITIAL_FIELD);
+  }
+
+  /**
+   * Baut den Gras-Teppich passend zum (ggf. erweiterten) Feld neu auf. Die
+   * Instanzzahl skaliert mit der Fläche (konstante Dichte), bis zu einem harten
+   * Deckel `CAP_FACTOR` – danach wird das Gras auf Riesenfeldern dünner (Perf).
+   * Nach dem Aufruf muss die Belegungs-Compaction (`setOccupancy`) erneut laufen.
+   */
+  rebuildForField(field: FieldBounds): void {
+    // Alte Meshes abbauen (geteilte Clump-Geometrie NICHT disposen).
+    for (const c of this.cullables) {
+      this.object.remove(c.mesh);
+      c.mesh.dispose();
+      (c.mesh.material as THREE.Material).dispose();
+    }
+    this.cullables = [];
+
+    const area = (field.maxX - field.minX) * (field.maxZ - field.minZ);
+    for (const src of this.sources) {
+      const density = src.count / BASE_AREA;
+      const cap = Math.round(src.count * CAP_FACTOR);
+      const count = Math.min(Math.round(density * area), cap);
+      if (count > 0) this.add(this.buildClumps(src, field, count));
+    }
   }
 
   /** Aktualisiert die Windphase (im Render-Loop mit Gesamtzeit in Sekunden). */
@@ -96,33 +126,36 @@ export class Grass {
   }
 
   /**
-   * GLB-Büschel über die Fläche verteilen. `scatter: true` (Akzente) streut rein
-   * zufällig; sonst auf einem jittered Grid — das garantiert lückenlose, gleich-
-   * mäßige Abdeckung (reines Zufalls-Streuen erzeugt Klumpen und kahle Stellen).
+   * GLB-Büschel über das Feld-Rechteck verteilen. `scatter: true` (Akzente) streut
+   * rein zufällig; sonst auf einem jittered Grid — das garantiert lückenlose,
+   * gleichmäßige Abdeckung (reines Zufalls-Streuen erzeugt Klumpen und kahle Stellen).
    */
-  private buildClumps(src: ClumpSource): THREE.InstancedMesh {
+  private buildClumps(src: ClumpSource, field: FieldBounds, count: number): THREE.InstancedMesh {
     const mat = src.material.clone();
     applyWind(mat, this.uTime, CLUMP_HEIGHT, src.amplitude);
 
-    const mesh = new THREE.InstancedMesh(src.geometry, mat, src.count);
+    const mesh = new THREE.InstancedMesh(src.geometry, mat, count);
     mesh.castShadow = false;
     mesh.receiveShadow = true;
     mesh.frustumCulled = false; // Instanzen sind über die ganze Fläche verteilt
 
+    const width = field.maxX - field.minX;
+    const depth = field.maxZ - field.minZ;
     const dummy = new THREE.Object3D();
-    const cols = Math.ceil(Math.sqrt(src.count));
-    const cell = (AREA * 2) / cols;
+    // Raster proportional zum (nicht zwingend quadratischen) Feld.
+    const cell = Math.sqrt((width * depth) / Math.max(1, count));
+    const cols = Math.max(1, Math.ceil(width / cell));
 
-    for (let i = 0; i < src.count; i++) {
+    for (let i = 0; i < count; i++) {
       if (src.scatter) {
-        dummy.position.set((Math.random() * 2 - 1) * AREA, 0, (Math.random() * 2 - 1) * AREA);
+        dummy.position.set(field.minX + Math.random() * width, 0, field.minZ + Math.random() * depth);
       } else {
         // Rasterzelle + Jitter → überlappende, gleichmäßige Abdeckung
         const gx = i % cols;
         const gz = Math.floor(i / cols);
         const jx = (Math.random() - 0.5) * cell;
         const jz = (Math.random() - 0.5) * cell;
-        dummy.position.set(-AREA + (gx + 0.5) * cell + jx, 0, -AREA + (gz + 0.5) * cell + jz);
+        dummy.position.set(field.minX + (gx + 0.5) * cell + jx, 0, field.minZ + (gz + 0.5) * cell + jz);
       }
       dummy.rotation.y = Math.random() * Math.PI * 2;
       const s = 0.95 + Math.random() * 0.55;

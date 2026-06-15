@@ -1,5 +1,6 @@
 import { GameState, type SaveData, type SlotState } from "../game/GameState";
 import { getAnimal } from "../game/config/animals";
+import { INITIAL_FIELD, isValidField } from "../game/config/chunks";
 import { offlineGain } from "../game/economy";
 
 /** Index aller Spielstände (leichte Metadaten fürs Startmenü). */
@@ -108,11 +109,16 @@ export class SaveManager {
     } catch {
       return false;
     }
-    if (data.version !== 2 || !Array.isArray(data.buildings) || !Array.isArray(data.slots)) {
+    // v2 (ohne Feld) und v3 (mit Feld) werden geladen; alles andere abgelehnt.
+    const version = (data as { version?: number }).version;
+    if ((version !== 2 && version !== 3) || !Array.isArray(data.buildings) || !Array.isArray(data.slots)) {
       return false;
     }
 
     state.money = data.money ?? 0;
+    // Feldgrenzen: v3 validieren, sonst (v2 / kaputt) Startfeld. Bestehende
+    // Gebäude/Straßen außerhalb bleiben erhalten – nur NEUE Platzierung ist begrenzt.
+    state.field = isValidField(data.field) ? { ...data.field } : { ...INITIAL_FIELD };
     state.buildings = data.buildings.map((b) => ({
       defId: b.defId,
       x: b.x,
