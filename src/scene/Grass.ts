@@ -38,6 +38,8 @@ interface Cullable {
   mesh: THREE.InstancedMesh;
   /** Alle erzeugten Instanz-Matrizen (vollständig, Reihenfolge stabil). */
   orig: Float32Array;
+  /** Halbe XZ-Ausdehnung der Geometrie (bei Skalierung 1) für überlappungs-genaues Culling. */
+  baseHalf: number;
 }
 
 export class Grass {
@@ -60,7 +62,7 @@ export class Grass {
    * sichtbaren nach vorne gepackt und gerendert werden. Bei jeder Bau-/Straßen-
    * Änderung aufrufen — verdeckte Büschel erscheinen nach Entfernen wieder.
    */
-  setOccupancy(isOccupied: (x: number, z: number) => boolean): void {
+  setOccupancy(isOccupied: (x: number, z: number, radius: number) => boolean): void {
     for (const c of this.cullables) {
       const arr = c.mesh.instanceMatrix.array as Float32Array;
       const orig = c.orig;
@@ -68,9 +70,13 @@ export class Grass {
       let w = 0;
       for (let i = 0; i < total; i++) {
         const o = i * 16;
-        if (isOccupied(orig[o + 12], orig[o + 14])) continue;
-        if (w !== i) arr.copyWithin(w * 16, o, o + 16);
-        else if (arr !== orig) arr.set(orig.subarray(o, o + 16), w * 16);
+        // Skalierung steckt in der Länge der ersten Matrix-Spalte (uniform skaliert).
+        const scale = Math.hypot(orig[o], orig[o + 1], orig[o + 2]);
+        const radius = c.baseHalf * scale;
+        if (isOccupied(orig[o + 12], orig[o + 14], radius)) continue;
+        // IMMER aus orig kopieren (nie aus dem schon umsortierten arr), sonst
+        // verschieben sich bei wiederholten Aufrufen die Positionen.
+        arr.set(orig.subarray(o, o + 16), w * 16);
         w++;
       }
       c.mesh.count = w; // nur die sichtbaren Instanzen rendern
@@ -80,7 +86,12 @@ export class Grass {
 
   /** Registriert ein Mesh als Cullable und hängt es in die Gruppe. */
   private add(mesh: THREE.InstancedMesh): void {
-    this.cullables.push({ mesh, orig: (mesh.instanceMatrix.array as Float32Array).slice() });
+    const geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    const bb = geo.boundingBox!;
+    // Geometrie ist in XZ um den Ursprung zentriert → halbe Ausdehnung.
+    const baseHalf = Math.max(bb.max.x, -bb.min.x, bb.max.z, -bb.min.z);
+    this.cullables.push({ mesh, orig: (mesh.instanceMatrix.array as Float32Array).slice(), baseHalf });
     this.object.add(mesh);
   }
 

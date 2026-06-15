@@ -9,8 +9,8 @@ import { SlotEntity, type PickData } from "./SlotEntity";
 import type { AnimalModels } from "./AnimalModels";
 import type { Grass } from "./Grass";
 
-/** Sicherheitsabstand um Gebäude-Grundflächen, in dem kein Gras wächst. */
-const GRASS_BUILD_MARGIN = 0.6;
+/** Kleiner Zusatzabstand zur Gebäudewand (der Büschel-Radius wird separat addiert). */
+const GRASS_BUILD_MARGIN = 0.1;
 
 /**
  * Verwaltet die sichtbare Welt: Gebäude-Meshes + ihre Slot-Entities und die
@@ -100,21 +100,33 @@ export class World {
 
   /** Blendet Gras unter Gebäuden/Straßen aus (und anderswo wieder ein). */
   private cullGrass(): void {
-    this.grass?.setOccupancy((x, z) => this.isOccupied(x, z));
+    this.grass?.setOccupancy((x, z, r) => this.isOccupied(x, z, r));
   }
 
-  /** Liegt der Welt-Punkt auf einer Straßen-Kachel oder Gebäude-Grundfläche? */
-  private isOccupied(x: number, z: number): boolean {
-    const { gx, gz } = worldToCell(x, z);
-    if (this.state.hasRoad(gx, gz)) return true;
+  /**
+   * Überlappt ein Büschel (Mittelpunkt x/z, Radius r) eine Straßen-Kachel oder
+   * Gebäude-Grundfläche? Der Radius wird berücksichtigt, damit breite Büschel
+   * nicht von außen ins Gebäude/auf die Straße ragen.
+   */
+  private isOccupied(x: number, z: number, r: number): boolean {
+    // Straßen: alle Rasterzellen prüfen, die der Büschel-Umkreis berührt.
+    const gxMin = worldToCell(x - r, z).gx;
+    const gxMax = worldToCell(x + r, z).gx;
+    const gzMin = worldToCell(x, z - r).gz;
+    const gzMax = worldToCell(x, z + r).gz;
+    for (let gx = gxMin; gx <= gxMax; gx++) {
+      for (let gz = gzMin; gz <= gzMax; gz++) {
+        if (this.state.hasRoad(gx, gz)) return true;
+      }
+    }
 
     for (const b of this.state.buildings) {
       const def = getBuilding(b.defId);
       if (!def) continue;
       // Drehung um 90°/270° tauscht Breite und Tiefe.
       const rotated = Math.abs(Math.sin(b.rotation)) > 0.5;
-      const hw = (rotated ? def.depth : def.width) / 2 + GRASS_BUILD_MARGIN;
-      const hd = (rotated ? def.width : def.depth) / 2 + GRASS_BUILD_MARGIN;
+      const hw = (rotated ? def.depth : def.width) / 2 + GRASS_BUILD_MARGIN + r;
+      const hd = (rotated ? def.width : def.depth) / 2 + GRASS_BUILD_MARGIN + r;
       if (Math.abs(x - b.x) <= hw && Math.abs(z - b.z) <= hd) return true;
     }
     return false;
