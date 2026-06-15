@@ -9,6 +9,12 @@ const COIN_SIZE = 0.7;
 const COIN_URL = "/models/ui/Coin.glb";
 const COIN_PILE_URL = "/models/ui/Coin Piles.glb";
 
+/** Dekorative, nicht kaufbare Modelle (streunender Hund, Frosch). */
+const DECOR: { id: string; url: string; size: number }[] = [
+  { id: "shiba", url: "/models/animals/Shiba Inu.glb", size: 1.2 },
+  { id: "frog", url: "/models/animals/Frog.glb", size: 0.45 },
+];
+
 /**
  * Lädt die glTF-Modelle (Tiere + UI-Münzen) und normalisiert sie auf eine
  * einheitliche Größe. Liefert fertig skalierte Klon-Instanzen sowie die
@@ -39,6 +45,15 @@ export class AnimalModels {
           this.buildings.set(def.id, this.normalizeBuilding(gltf.scene, def.width, def.depth, def.modelRotation ?? 0));
         } catch {
           // ohne Modell greift der Primitive-Fallback
+        }
+      }),
+      ...DECOR.map(async (d) => {
+        try {
+          const gltf = await loader.loadAsync(d.url);
+          this.templates.set(d.id, this.normalize(gltf.scene, d.size, true));
+          this.clips.set(d.id, gltf.animations ?? []);
+        } catch {
+          // ohne Modell wird der Critter einfach nicht erzeugt
         }
       }),
       (async () => {

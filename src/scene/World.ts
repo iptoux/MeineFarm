@@ -51,6 +51,24 @@ export class World {
     this.rebuildRoads();
   }
 
+  /**
+   * Baut die komplette Welt aus der Szene ab und gibt eigene GPU-Ressourcen frei.
+   * Boden, Gras, Licht und Himmel (Teil des persistenten Rigs) bleiben erhalten.
+   */
+  dispose(): void {
+    for (const g of this.buildingGroups) this.scene.remove(g);
+    for (const e of this.entities) this.scene.remove(e.group);
+    this.entities = [];
+    this.buildingGroups = [];
+    this.buildingMeshes = [];
+    this.roofMeshes.length = 0;
+    this.scene.remove(this.roadGroup);
+    this.roadGroup.clear();
+    this.roadGeo.dispose();
+    for (const mat of this.roadMats.values()) mat.dispose();
+    this.roadMats.clear();
+  }
+
   /** Erzeugt Mesh + Slot-Entities für das Gebäude mit dem gegebenen Index. */
   addBuildingVisuals(buildingIndex: number): void {
     const placed = this.state.buildings[buildingIndex];

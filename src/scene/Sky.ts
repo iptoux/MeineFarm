@@ -29,6 +29,9 @@ export class SkyManager {
   /** Zeitraffer-Faktor (1 = Echtzeit gemäß DAY_LENGTH_SEC). */
   speed = 1;
 
+  /** Tageslicht-Faktor [0,1]: 0 = Nacht, 1 = heller Tag (für Wolkenschatten o.ä.). */
+  daylight = 1;
+
   private readonly sky: Sky;
   private readonly stars: THREE.Points;
   private readonly starMat: THREE.PointsMaterial;
@@ -86,6 +89,7 @@ export class SkyManager {
 
     // Mischfaktoren: Tageslicht und Dämmerungs-Wärme nahe am Horizont.
     const day = THREE.MathUtils.clamp(elevation / 8, 0, 1);
+    this.daylight = day;
     const dusk = THREE.MathUtils.clamp(1 - Math.abs(elevation) / 12, 0, 1) * (elevation > -12 ? 1 : 0);
 
     this.sun.intensity = day * 1.3;

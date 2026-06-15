@@ -14,11 +14,16 @@ export class AnimalMenu {
   constructor(
     private state: GameState,
     private handlers: AnimalMenuHandlers,
+    signal?: AbortSignal,
   ) {
     this.el = document.getElementById("animal-menu")!;
-    document.addEventListener("pointerdown", (e) => {
-      if (!this.el.contains(e.target as Node)) this.close();
-    });
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (!this.el.contains(e.target as Node)) this.close();
+      },
+      { signal },
+    );
   }
 
   close(): void {

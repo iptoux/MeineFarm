@@ -20,6 +20,8 @@ export interface BuildingDef {
   fadeAll?: boolean;
   /** Optional: Rand-Abstand des Slot-Rasters (x & z) — größer = Slots weiter innen. */
   slotInset?: number;
+  /** Optional: Emoji im Bau-Menü (Default 🏠). */
+  icon?: string;
 }
 
 export const BUILDINGS: BuildingDef[] = [
@@ -46,6 +48,30 @@ export const BUILDINGS: BuildingDef[] = [
     model: "/models/buildings/Big Barn.glb",
     fadeAll: true,
     slotInset: 3.4,
+  },
+  {
+    id: "zaun",
+    name: "Zaun",
+    cost: 15,
+    slotCount: 0,
+    width: 6,
+    depth: 1,
+    roofColor: 0x5a2f1a,
+    model: "/models/buildings/Fence.glb",
+    fadeAll: false,
+    icon: "🚧",
+  },
+  {
+    id: "zaun_gross",
+    name: "Großer Zaun",
+    cost: 30,
+    slotCount: 0,
+    width: 6,
+    depth: 1,
+    roofColor: 0x5a2f1a,
+    model: "/models/buildings/Fence_big.glb",
+    fadeAll: false,
+    icon: "🚧",
   },
 ];
 

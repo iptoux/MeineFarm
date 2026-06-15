@@ -5,6 +5,8 @@
  */
 export class AudioManager {
   private music: HTMLAudioElement;
+  /** Leise Bauernhof-Geräuschkulisse, läuft zusätzlich zur Musik im Loop. */
+  private ambience: HTMLAudioElement;
   private muted = false;
   private unlocked = false;
 
@@ -13,9 +15,16 @@ export class AudioManager {
     this.music.loop = true;
     this.music.volume = 0.3;
 
+    this.ambience = new Audio("/sounds/farm-ambience.mp3");
+    this.ambience.loop = true;
+    this.ambience.volume = 0.18;
+
     const unlock = () => {
       this.unlocked = true;
-      if (!this.muted) void this.music.play().catch(() => {});
+      if (!this.muted) {
+        void this.music.play().catch(() => {});
+        void this.ambience.play().catch(() => {});
+      }
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
     };
@@ -52,6 +61,11 @@ export class AudioManager {
     this.play("build.wav", 0.3);
   }
 
+  /** Tierspezifischer Ruf (Datei `animals/<id>.mp3`); fehlt sie, passiert nichts. */
+  playAnimalCall(id: string, volume = 0.5): void {
+    this.play(`animals/${id}.mp3`, volume);
+  }
+
   get isMuted(): boolean {
     return this.muted;
   }
@@ -61,8 +75,10 @@ export class AudioManager {
     this.muted = !this.muted;
     if (this.muted) {
       this.music.pause();
+      this.ambience.pause();
     } else if (this.unlocked) {
       void this.music.play().catch(() => {});
+      void this.ambience.play().catch(() => {});
     }
     return this.muted;
   }

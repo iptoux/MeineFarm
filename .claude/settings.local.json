@@ -21,7 +21,25 @@
       "PowerShell(if \\($?\\) { \"OK\" })",
       "PowerShell(pnpm run build 2>&1)",
       "Bash(rm -f tmp_diag.mjs diag_*.png)",
-      "PowerShell(if \\($?\\) { \"TS OK\" })"
+      "PowerShell(if \\($?\\) { \"TS OK\" })",
+      "PowerShell(pnpm build 2>&1)",
+      "PowerShell(pnpm exec tsc --noEmit; Write-Output \"EXIT=$LASTEXITCODE\")",
+      "Read(//c/Users/quork/Entwicklung/MeinHaustier/public/sounds//**)",
+      "Read(//c/Users/quork/Entwicklung/MeinHaustier/public/models/animals//**)",
+      "WebFetch(domain:mixkit.co)",
+      "Bash(curl -s -A \"Mozilla/5.0\" https://mixkit.co/free-sound-effects/farm/ -o /tmp/farm.html)",
+      "Read(//tmp/**)",
+      "Bash(cd /tmp; grep -oE '\\(data-name=\"[^\"]*\"|sfx/[0-9]+/[0-9]+-preview\\\\.mp3\\)' farm.html | head -120)",
+      "Read(//c/tmp/**)",
+      "Bash(python -c ' *)",
+      "Bash(ffmpeg -version)",
+      "Bash(curl -s -A Mozilla/5.0 __TRACKED_VAR__/1772/1772-preview.mp3 -o animals/huhn.mp3)",
+      "Bash(curl -s -A Mozilla/5.0 __TRACKED_VAR__/1747/1747-preview.mp3 -o animals/kuh.mp3)",
+      "Bash(curl -s -A Mozilla/5.0 __TRACKED_VAR__/2242/2242-preview.mp3 -o /tmp/pig2242.mp3)",
+      "PowerShell(pnpm build; Write-Output \"EXIT=$LASTEXITCODE\")",
+      "Read(//c/Users/quork/Entwicklung/MeinHaustier/**)",
+      "Bash(ls tests *)",
+      "Bash(ls playwright.config.*)"
     ]
   }
 }

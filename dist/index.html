@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MeinHaustier — Tierfarm-Tycoon</title>
-    <script type="module" crossorigin src="/assets/index-DNDhaqyj.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-KaP7ACPt.css">
+    <script type="module" crossorigin src="/assets/index-CjvzfeXQ.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DgaUUCqI.css">
   </head>
   <body>
     <canvas id="game-canvas"></canvas>
@@ -16,6 +16,7 @@
       <span id="hud-money">0 €</span>
     </div>
     <button id="mute-btn" title="Ton an/aus">🔊</button>
+    <button id="menu-btn" title="Zum Startmenü">☰ Menü</button>
 
     <!-- Tag/Nacht-Anzeige (oben mittig) -->
     <div id="daynight" title="Tageszeit">
@@ -34,6 +35,9 @@
 
     <!-- Globales Bau-Menü (unten zentriert) -->
     <div id="build-menu"></div>
+
+    <!-- Startmenü (Vollbild-Overlay; per JS gefüllt) -->
+    <div id="start-menu" class="hidden"></div>
 
   </body>
 </html>

@@ -17,11 +17,16 @@ export class BuildingMenu {
   constructor(
     private state: GameState,
     private handlers: BuildingMenuHandlers,
+    signal?: AbortSignal,
   ) {
     this.el = document.getElementById("building-menu")!;
-    document.addEventListener("pointerdown", (e) => {
-      if (!this.el.contains(e.target as Node)) this.close();
-    });
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (!this.el.contains(e.target as Node)) this.close();
+      },
+      { signal },
+    );
   }
 
   close(): void {

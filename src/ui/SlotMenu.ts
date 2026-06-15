@@ -13,12 +13,17 @@ export class SlotMenu {
   constructor(
     private state: GameState,
     private audio: AudioManager,
+    signal?: AbortSignal,
   ) {
     this.el = document.getElementById("slot-menu")!;
     // Klick außerhalb schließt das Menü
-    document.addEventListener("pointerdown", (e) => {
-      if (!this.el.contains(e.target as Node)) this.close();
-    });
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (!this.el.contains(e.target as Node)) this.close();
+      },
+      { signal },
+    );
   }
 
   close(): void {

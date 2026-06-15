@@ -9,3 +9,9 @@ Attribution erforderlich).
 - `purchase.wav` — Geld-/Kauf-Sound (SFX #1989) — Tier kaufen
 - `build.wav` — Hammer/Bau-Sound (SFX #830) — Gebäude bauen / Straße legen
 - `farm-music.mp3` — „Fun at the Farm" (Music #1063) — Hintergrundmusik
+- `farm-ambience.mp3` — „Farm animals in the morning" (SFX #7) — leise Hintergrund-Kulisse
+- `animals/huhn.mp3` — „Chickens clucking short" (SFX #1772) — Huhn-Ruf
+- `animals/schwein.mp3` — „Pig herd grunt and cry" (SFX #1765, auf 3 s gekürzt) — Schwein-Ruf
+- `animals/schaf.mp3` — „Sheep sounds" (SFX #1741) — Schaf-Ruf
+- `animals/kuh.mp3` — „Cow single moo" (SFX #1747) — Kuh-Ruf
+- `animals/pferd.mp3` — „Stallion horse neigh" (SFX #1762) — Pferd-Ruf

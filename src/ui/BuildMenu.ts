@@ -24,7 +24,7 @@ export class BuildMenu {
   ) {
     this.el = document.getElementById("build-menu")!;
     this.items = [
-      ...BUILDINGS.map((b) => ({ id: b.id, label: `🏠 ${b.name}`, cost: b.cost })),
+      ...BUILDINGS.map((b) => ({ id: b.id, label: `${b.icon ?? "🏠"} ${b.name}`, cost: b.cost })),
       ...ROADS.map((r) => ({ id: r.id, label: `${r.id === "feldweg" ? "🌾" : "🛣️"} ${r.name}`, cost: r.cost })),
     ];
     this.build();

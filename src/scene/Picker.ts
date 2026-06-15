@@ -35,10 +35,11 @@ export class Picker {
     private getPickables: () => THREE.Object3D[],
     private handlers: PickerHandlers,
     private isBlocked: () => boolean = () => false,
+    signal?: AbortSignal,
   ) {
-    dom.addEventListener("pointerdown", this.onDown);
-    dom.addEventListener("pointerup", this.onUp);
-    dom.addEventListener("contextmenu", (e) => e.preventDefault());
+    dom.addEventListener("pointerdown", this.onDown, { signal });
+    dom.addEventListener("pointerup", this.onUp, { signal });
+    dom.addEventListener("contextmenu", (e) => e.preventDefault(), { signal });
   }
 
   private onDown = (e: PointerEvent): void => {
