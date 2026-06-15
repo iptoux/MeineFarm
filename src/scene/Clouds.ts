@@ -9,10 +9,10 @@ import * as THREE from "three";
  * Szenenlicht automatisch mit ab.
  */
 
-const CLOUD_COUNT = 7;
+const CLOUD_COUNT = 12;
 /** Halber Bereich (x/z), über den Wolken verteilt sind und wrappen. */
 const SPREAD = 60;
-const CLOUD_HEIGHT = 46;
+const CLOUD_HEIGHT = 28;
 /** Windgeschwindigkeit (Welt-Einheiten/Sekunde). */
 const WIND = new THREE.Vector2(1.1, 0.25);
 const SHADOW_MAX_OPACITY = 0.22;

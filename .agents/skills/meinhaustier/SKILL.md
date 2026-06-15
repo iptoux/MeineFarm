@@ -15,11 +15,23 @@ Tag/Nacht, Spielstände. Immer zuerst dort die relevante Sektion lesen.
   **immer `pnpm build`** zum Typecheck.
 
 ## Architektur in einem Satz (docs §2)
-Ein persistentes **Rig** (`SceneManager`, `AnimalModels`, `Grass`, `CoinBurst`,
-`AudioManager`, `SkyManager`, `DayNightHud`) und die **einzige** Render-Schleife
-leben in `main.ts`; pro Spielstand kapselt eine **`GameSession`** `GameState`,
-`World` und alle State-gebundenen UI-/Controller (mit `AbortController`-Cleanup).
-Startmenü ↔ Session über `onPlay(id)` / `session.dispose()`.
+Ein persistentes **Rig** (`SceneManager`, `AnimalModels`, `Grass`, `CloudManager`,
+`CoinBurst`, `AudioManager`, `SkyManager`, `DayNightHud`) und die **einzige**
+Render-Schleife leben in `main.ts`; pro Spielstand kapselt eine **`GameSession`**
+`GameState`, `World`, die Deko-Critter (`CritterManager`), die Hintergrund-Rufe
+(`AmbientAnimals`) und alle State-gebundenen UI-/Controller (mit
+`AbortController`-Cleanup). Startmenü ↔ Session über `onPlay(id)` / `session.dispose()`.
+
+## Zusatz-Systeme (docs §5.1, §14, §19, §20)
+- **Platzierung**: `R` dreht (90°), Zäune (`slotCount: 0`) snappen an Enden und
+  blockieren sich **nicht** gegenseitig (docs §5.1).
+- **Audio**: zwei Loops (Musik + Ambience) + Tierrufe `playAnimalCall(id)`
+  (`sounds/animals/<id>.mp3`); zufällige Hintergrund-Rufe via `AmbientAnimals` (§14).
+- **Critter** (`Critters.ts`, pro Session): streunender Hund mit A*-Pathfinding
+  (umgeht Gebäude, Tür-Lücke nur bei Ställen, Zäune blockieren ganz) + seltene
+  Frösche über Straßen (max. 2). Deko-Modelle in `DECOR` (`AnimalModels.ts`) (§19).
+- **Wolken** (`Clouds.ts`, Rig): ziehende Low-Poly-Wolken + gefälschte Schatten-Decals,
+  nachts via `sky.daylight` ausgeblendet (§20).
 
 ## Eiserne Regeln (häufige Fehlerquellen)
 1. **Gerigte glTF-Modelle nur mit `SkeletonUtils.clone()` klonen** — `Object3D.clone()`
@@ -47,6 +59,10 @@ Datengetrieben — meist ein Katalog-Eintrag (Checkliste docs §17):
 - Gebäude: GLB nach `public/models/buildings/`, Eintrag in
   `src/game/config/buildings.ts` (`model`, `width/depth`, `fadeAll` ODER
   `roofMaterials`, ggf. `modelRotation` damit die offene Seite nach +z zeigt).
+- **Deko-Objekt** (Zaun-artig): `slotCount: 0` (+ `icon`) — platzier-/dreh-/snappbar
+  ohne weiteren Code, blockiert den Hund automatisch.
+- **Deko-Critter** (Hund/Frosch): GLB + Eintrag in `DECOR` (`AnimalModels.ts`),
+  Bewegung/Animation im `CritterManager` (docs §19).
 
 ## Verifikation (Pflicht bei sichtbaren Änderungen)
 Kein UI-Testrunner — per **Playwright-Screenshot** prüfen. Im Dev-Build:
@@ -66,7 +82,9 @@ Ablauf:
 
 Nützliche Hooks: `session.world.bubbleWorldPos(i)`, `session.world.animalClip(i)`,
 `session.state.slotBase(b)`, `sky.timeOfDay`/`sky.speed` (Tageszeit setzen/anhalten),
-`grass.cullables` (sichtbare/Gesamt-Instanzen), `sceneManager.camera/controls`.
+`grass.cullables` (sichtbare/Gesamt-Instanzen), `sceneManager.camera/controls`,
+`session.critters.dog.object.position`/`session.critters.frogs` (Critter),
+`session.placement` (`begin`/`rotation`/`isValid` für Platzierungs-Tests).
 
 ## Stil
 - Code an den Nachbardateien orientieren (deutsche Kommentare, knapp, datengetrieben).

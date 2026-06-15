@@ -165,11 +165,11 @@ export class GameState {
   }
 
   /** Baut ein neues Gebäude (kostet `def.cost`); gibt den Gebäude-Index zurück oder -1. */
-  addBuilding(defId: string, x: number, z: number): number {
+  addBuilding(defId: string, x: number, z: number, rotation = 0): number {
     const def = getBuilding(defId);
     if (!def || !this.canAfford(def.cost)) return -1;
     this.money -= def.cost;
-    this.buildings.push({ defId, x, z, rotation: 0 });
+    this.buildings.push({ defId, x, z, rotation });
     for (let i = 0; i < def.slotCount; i++) this.slots.push(makeSlot());
     this.emit();
     return this.buildings.length - 1;
@@ -183,12 +183,13 @@ export class GameState {
     this.emit();
   }
 
-  /** Verschiebt ein Gebäude an eine neue Position. */
-  moveBuilding(buildingIndex: number, x: number, z: number): void {
+  /** Verschiebt ein Gebäude an eine neue Position (optional mit neuer Drehung). */
+  moveBuilding(buildingIndex: number, x: number, z: number, rotation?: number): void {
     const b = this.buildings[buildingIndex];
     if (!b) return;
     b.x = x;
     b.z = z;
+    if (rotation !== undefined) b.rotation = rotation;
     this.emit();
   }
 

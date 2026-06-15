@@ -77,15 +77,15 @@ export class GameSession {
       sceneManager.controls,
       this.state,
       {
-        onBuild: (defId, x, z) => {
-          const idx = this.state.addBuilding(defId, x, z);
+        onBuild: (defId, x, z, rotation) => {
+          const idx = this.state.addBuilding(defId, x, z, rotation);
           if (idx >= 0) {
             this.world.addBuildingVisuals(idx);
             audio.playBuild();
           }
         },
-        onMove: (i, x, z) => {
-          this.state.moveBuilding(i, x, z);
+        onMove: (i, x, z, rotation) => {
+          this.state.moveBuilding(i, x, z, rotation);
           this.world.rebuild();
         },
       },

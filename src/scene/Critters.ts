@@ -196,10 +196,11 @@ class Dog {
     return new THREE.Vector2(0, 12);
   }
 
-  /** Mittelpunkt eines zufälligen Gebäudes (Ziel für einen „Besuch"). */
+  /** Mittelpunkt eines zufälligen Stalls (Ziel für einen „Besuch"); sonst freier Punkt. */
   private buildingVisitPoint(): THREE.Vector2 {
-    const bs = this.gameState.buildings;
-    const b = bs[Math.floor(Math.random() * bs.length)];
+    const barns = this.gameState.buildings.filter((b) => (getBuilding(b.defId)?.slotCount ?? 0) > 0);
+    if (barns.length === 0) return this.freePoint();
+    const b = barns[Math.floor(Math.random() * barns.length)];
     return new THREE.Vector2(b.x, b.z);
   }
 }
@@ -310,16 +311,20 @@ function toLocal(b: PlacedBuilding, x: number, z: number): { lx: number; lz: num
   return { lx: dx * cos + dz * sin, lz: -dx * sin + dz * cos };
 }
 
-/** Liegt der Punkt in einem Gebäude-Footprint und NICHT im vorderen Tür-Korridor? */
-function blockedByBuildings(buildings: PlacedBuilding[], x: number, z: number, margin = 0.4): boolean {
+/**
+ * Liegt der Punkt in einem Gebäude-Footprint (und NICHT im vorderen Tür-Korridor
+ * eines Stalls)? `cellHalf` weitet die Prüfung auf eine Rasterzelle aus, damit auch
+ * dünne Hindernisse (Zäune) zuverlässig blockieren, statt zwischen Zellen zu rutschen.
+ */
+function blockedByBuildings(buildings: PlacedBuilding[], x: number, z: number, pad = 0.4, cellHalf = 0): boolean {
   for (const b of buildings) {
     const def = getBuilding(b.defId);
     if (!def) continue;
     const { lx, lz } = toLocal(b, x, z);
-    if (Math.abs(lx) <= def.width / 2 + margin && Math.abs(lz) <= def.depth / 2 + margin) {
-      // Offener Korridor von der Mitte zur Vorderseite (lokales +z).
-      const inDoor = lz >= -0.2 && Math.abs(lx) <= DOOR_HALF;
-      if (!inDoor) return true;
+    if (Math.abs(lx) <= def.width / 2 + pad + cellHalf && Math.abs(lz) <= def.depth / 2 + pad + cellHalf) {
+      // Nur Ställe (mit Slots) haben eine offene Vorderseite zum Betreten; Zäune blockieren ganz.
+      if (def.slotCount > 0 && lz >= -0.2 && Math.abs(lx) <= DOOR_HALF) continue;
+      return true;
     }
   }
   return false;
@@ -348,7 +353,7 @@ function planPath(buildings: PlacedBuilding[], from: THREE.Vector2, to: THREE.Ve
   const blocked = new Uint8Array(GRID_N * GRID_N);
   for (let cz = 0; cz < GRID_N; cz++) {
     for (let cx = 0; cx < GRID_N; cx++) {
-      if (blockedByBuildings(buildings, cellToWorld(cx), cellToWorld(cz))) blocked[cz * GRID_N + cx] = 1;
+      if (blockedByBuildings(buildings, cellToWorld(cx), cellToWorld(cz), 0.4, CELL / 2)) blocked[cz * GRID_N + cx] = 1;
     }
   }
 

@@ -11,7 +11,7 @@ const COIN_PILE_URL = "/models/ui/Coin Piles.glb";
 
 /** Dekorative, nicht kaufbare Modelle (streunender Hund, Frosch). */
 const DECOR: { id: string; url: string; size: number }[] = [
-  { id: "shiba", url: "/models/animals/Shiba Inu.glb", size: 1.2 },
+  { id: "shiba", url: "/models/animals/Shiba Inu.glb", size: 2.0 },
   { id: "frog", url: "/models/animals/Frog.glb", size: 0.45 },
 ];
 

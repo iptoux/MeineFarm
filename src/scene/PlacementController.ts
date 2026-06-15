@@ -22,10 +22,13 @@ type Mode = BuildMode | MoveMode;
 
 export interface PlacementHandlers {
   /** Neues Gebäude platzieren. */
-  onBuild: (defId: string, x: number, z: number) => void;
-  /** Bestehendes Gebäude verschieben. */
-  onMove: (buildingIndex: number, x: number, z: number) => void;
+  onBuild: (defId: string, x: number, z: number, rotation: number) => void;
+  /** Bestehendes Gebäude verschieben (mit aktueller Drehung). */
+  onMove: (buildingIndex: number, x: number, z: number, rotation: number) => void;
 }
+
+/** Abstand, in dem Zaun-Enden beim Platzieren aneinander einrasten. */
+const SNAP_DIST = 2.5;
 
 /**
  * Platzierungs-Modus für neue UND bestehende Gebäude: zeigt eine durchscheinende
@@ -35,11 +38,14 @@ export interface PlacementHandlers {
 export class PlacementController {
   private mode: Mode | null = null;
   private ghost: THREE.Group | null = null;
+  private rotation = 0;
   private padMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.35 });
   private boxMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.22 });
   private plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
+  /** Letzter aufgelöster Boden-Punkt (nach Snapping) für Tastendreh-Updates. */
+  private lastPoint: { x: number; z: number } | null = null;
 
   constructor(
     private scene: THREE.Scene,
@@ -70,6 +76,8 @@ export class PlacementController {
   private start(mode: Mode): void {
     if (this.active) this.cancel();
     this.mode = mode;
+    this.rotation = mode.type === "move" ? this.state.buildings[mode.buildingIndex]?.rotation ?? 0 : 0;
+    this.lastPoint = null;
     this.controls.enabled = false;
 
     const def = mode.def;
@@ -80,6 +88,7 @@ export class PlacementController {
     const box = new THREE.Mesh(new THREE.BoxGeometry(def.width, 3, def.depth), this.boxMat);
     box.position.y = 1.5;
     g.add(box);
+    g.rotation.y = this.rotation;
     this.ghost = g;
     this.scene.add(g);
 
@@ -104,8 +113,25 @@ export class PlacementController {
   }
 
   private onKey = (e: KeyboardEvent): void => {
-    if (e.key === "Escape") this.cancel();
+    if (e.key === "Escape") {
+      this.cancel();
+    } else if (e.key.toLowerCase() === "r") {
+      this.rotation = (this.rotation + Math.PI / 2) % (Math.PI * 2);
+      this.refreshGhost();
+    }
   };
+
+  /** Aktualisiert Drehung/Position/Farbe der Silhouette am zuletzt bekannten Punkt. */
+  private refreshGhost(): void {
+    if (!this.ghost) return;
+    this.ghost.rotation.y = this.rotation;
+    if (!this.lastPoint) return;
+    const { x, z } = this.lastPoint;
+    this.ghost.position.set(x, 0, z);
+    const col = this.isValid(x, z) ? VALID : INVALID;
+    this.padMat.color.copy(col);
+    this.boxMat.color.copy(col);
+  }
 
   private onContext = (e: MouseEvent): void => {
     e.preventDefault();
@@ -123,8 +149,9 @@ export class PlacementController {
 
   private onMove = (e: PointerEvent): void => {
     if (!this.mode || !this.ghost) return;
-    const p = this.groundPoint(e);
+    const p = this.resolvePoint(e);
     if (!p) return;
+    this.lastPoint = p;
     this.ghost.position.set(p.x, 0, p.z);
     const col = this.isValid(p.x, p.z) ? VALID : INVALID;
     this.padMat.color.copy(col);
@@ -133,12 +160,50 @@ export class PlacementController {
 
   private onDown = (e: PointerEvent): void => {
     if (!this.mode || e.button !== 0) return;
-    const p = this.groundPoint(e);
+    const p = this.resolvePoint(e);
     if (!p || !this.isValid(p.x, p.z)) return;
-    if (this.mode.type === "build") this.handlers.onBuild(this.mode.def.id, p.x, p.z);
-    else this.handlers.onMove(this.mode.buildingIndex, p.x, p.z);
+    if (this.mode.type === "build") this.handlers.onBuild(this.mode.def.id, p.x, p.z, this.rotation);
+    else this.handlers.onMove(this.mode.buildingIndex, p.x, p.z, this.rotation);
     this.cancel();
   };
+
+  /** Boden-Punkt unter dem Cursor; bei Zäunen ggf. ans nächste Zaun-Ende gesnappt. */
+  private resolvePoint(e: PointerEvent): { x: number; z: number } | null {
+    const p = this.groundPoint(e);
+    if (!p) return null;
+    if (this.mode && this.mode.def.slotCount === 0) {
+      const snapped = this.snapFence(p.x, p.z);
+      if (snapped) return snapped;
+    }
+    return { x: p.x, z: p.z };
+  }
+
+  /** Sucht das nächste Ende eines bereits platzierten Zauns und rastet daran ein. */
+  private snapFence(x: number, z: number): { x: number; z: number } | null {
+    if (!this.mode) return null;
+    const selfIndex = this.mode.type === "move" ? this.mode.buildingIndex : -1;
+    const ghostEnds = fenceEnds(x, z, this.rotation, this.mode.def.width);
+
+    let best: { x: number; z: number } | null = null;
+    let bestDist = SNAP_DIST;
+    for (let i = 0; i < this.state.buildings.length; i++) {
+      if (i === selfIndex) continue;
+      const b = this.state.buildings[i];
+      const other = getBuilding(b.defId);
+      if (!other || other.slotCount !== 0) continue; // nur an andere Zäune snappen
+      const otherEnds = fenceEnds(b.x, b.z, b.rotation, other.width);
+      for (const ge of ghostEnds) {
+        for (const oe of otherEnds) {
+          const d = Math.hypot(ge.x - oe.x, ge.z - oe.z);
+          if (d < bestDist) {
+            bestDist = d;
+            best = { x: x + (oe.x - ge.x), z: z + (oe.z - ge.z) };
+          }
+        }
+      }
+    }
+    return best;
+  }
 
   /** Platzierbar, wenn (beim Bauen) bezahlbar, im Feld und ohne Überschneidung. */
   private isValid(x: number, z: number): boolean {
@@ -146,8 +211,7 @@ export class PlacementController {
     const def = this.mode.def;
     if (this.mode.type === "build" && !this.state.canAfford(def.cost)) return false;
 
-    const halfW = def.width / 2;
-    const halfD = def.depth / 2;
+    const [halfW, halfD] = halfExtents(def, this.rotation);
     if (Math.abs(x) + halfW > FIELD_HALF || Math.abs(z) + halfD > FIELD_HALF) return false;
 
     const selfIndex = this.mode.type === "move" ? this.mode.buildingIndex : -1;
@@ -156,10 +220,34 @@ export class PlacementController {
       const b = this.state.buildings[i];
       const other = getBuilding(b.defId);
       if (!other) continue;
-      const minDx = halfW + other.width / 2 + SPACING_MARGIN;
-      const minDz = halfD + other.depth / 2 + SPACING_MARGIN;
+      // Zäune (Deko ohne Slots) blockieren sich NICHT gegenseitig: man darf sie frei
+      // aneinanderreihen, über Eck setzen oder parallel bauen (Snapping richtet sie aus).
+      if (def.slotCount === 0 && other.slotCount === 0) continue;
+      const [ohw, ohd] = halfExtents(other, b.rotation);
+      // Zaun an Gebäude: darf dicht anschließen (minimale Toleranz statt voller Abstand).
+      const margin = def.slotCount === 0 || other.slotCount === 0 ? -0.05 : SPACING_MARGIN;
+      const minDx = halfW + ohw + margin;
+      const minDz = halfD + ohd + margin;
       if (Math.abs(x - b.x) < minDx && Math.abs(z - b.z) < minDz) return false;
     }
     return true;
   }
+}
+
+/** Welt-AABB-Halbausdehnungen (Drehung um 90°/270° tauscht Breite/Tiefe). */
+function halfExtents(def: BuildingDef, rotation: number): [number, number] {
+  const rotated = Math.abs(Math.sin(rotation)) > 0.5;
+  return rotated ? [def.depth / 2, def.width / 2] : [def.width / 2, def.depth / 2];
+}
+
+/** Die beiden Enden eines Zauns (Längsachse = lokales x) in Welt-Koordinaten. */
+function fenceEnds(x: number, z: number, rotation: number, length: number): { x: number; z: number }[] {
+  const c = Math.cos(rotation);
+  const s = Math.sin(rotation);
+  const hx = (length / 2) * c;
+  const hz = (length / 2) * s;
+  return [
+    { x: x + hx, z: z + hz },
+    { x: x - hx, z: z - hz },
+  ];
 }

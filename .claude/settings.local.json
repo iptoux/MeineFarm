@@ -39,7 +39,12 @@
       "PowerShell(pnpm build; Write-Output \"EXIT=$LASTEXITCODE\")",
       "Read(//c/Users/quork/Entwicklung/MeinHaustier/**)",
       "Bash(ls tests *)",
-      "Bash(ls playwright.config.*)"
+      "Bash(ls playwright.config.*)",
+      "Bash(node -e \"const{chromium}=require\\('playwright'\\);console.log\\('pw-ok'\\)\")",
+      "Read(//c/Users/quork/AppData/Local/ms-playwright/**)",
+      "PowerShell($env:BROWSER='none'; Start-Job -Name vite -ScriptBlock { Set-Location 'c:\\\\Users\\\\quork\\\\Entwicklung\\\\MeinHaustier'; $env:BROWSER='none'; pnpm preview --port 4173 } | Out-Null; Start-Sleep -Seconds 3; \\(Invoke-WebRequest -UseBasicParsing http://localhost:4173/ -TimeoutSec 5\\).StatusCode)",
+      "PowerShell(Get-Job)",
+      "PowerShell(Receive-Job -Name vite -Keep 2>&1)"
     ]
   }
 }

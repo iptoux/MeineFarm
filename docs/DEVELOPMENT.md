@@ -29,14 +29,16 @@ src/
     SceneManager.ts       # Renderer (Tonemapping/Fog), Kamera, OrbitControls, Licht, WASD, Zoom-Fade
     Ground.ts             # grüne Bodenfläche (y=0)
     Grass.ts              # Animiertes Wind-Gras (instanzierte GLB-Büschel) + Belegungs-Culling
-    Sky.ts                # SkyManager: atmosphärischer Himmel + Tag/Nacht-Zyklus + Sterne
+    Sky.ts                # SkyManager: atmosphärischer Himmel + Tag/Nacht-Zyklus + Sterne (+ daylight)
+    Clouds.ts             # CloudManager: ziehende Low-Poly-Wolken + weiche Bodenschatten (Rig)
     Building.ts           # createBuilding (Primitive) + createModelBuilding (glTF)
-    AnimalModels.ts       # Lädt/normalisiert alle glTF-Modelle (Tiere, Gebäude, UI)
+    AnimalModels.ts       # Lädt/normalisiert alle glTF-Modelle (Tiere, Deko-Critter, Gebäude, UI)
     SlotEntity.ts         # Ein Slot: Marker | Tier (+Animation) | Münze
     World.ts              # Baut Gebäude+Slots+Straßen aus dem State; Produktions-Tick; Gras-Culling
+    Critters.ts           # CritterManager: streunender Hund (A*-Pathfinding) + Frosch-Spawner (pro Session)
     Picker.ts             # Raycaster: Links-/Rechtsklick-Routing, Klick-Durchlass
     CoinBurst.ts          # 3D-Münz-Funken beim Ernten
-    PlacementController.ts # Gebäude bauen/bewegen (Silhouette)
+    PlacementController.ts # Gebäude/Zaun bauen/bewegen (Silhouette, R = drehen, Zaun-Snapping)
     RoadController.ts     # Straßen-Bau (Raster, Toggle)
     IconRenderer.ts       # Rendert ein Modell einmalig zu einer PNG-Data-URL (HUD-Icon)
   ui/
@@ -46,13 +48,16 @@ src/
     SlotMenu.ts, BuildMenu.ts, BuildingMenu.ts, AnimalMenu.ts, Effects.ts
     styles.css
   storage/SaveManager.ts  # localStorage: mehrere benannte Spielstände + Autosave + Offline-Gutschrift
-  audio/AudioManager.ts   # Musik + SFX (Mute, Autoplay-Unlock)
+  audio/
+    AudioManager.ts       # Musik + Ambience-Loop + SFX (Mute, Autoplay-Unlock) + playAnimalCall
+    AmbientAnimals.ts     # zufällige Hintergrund-Rufe der vorhandenen Tiere (pro Session)
 public/
-  models/animals/*.glb    # Tier-Modelle (Poly Pizza)
-  models/buildings/*.glb  # Gebäude-Modelle (Open/Big Barn genutzt; Fence* ungenutzt)
+  models/animals/*.glb    # Tier-Modelle (Poly Pizza); Shiba Inu.glb + Frog.glb = Deko-Critter; Husky.glb ungenutzt
+  models/buildings/*.glb  # Gebäude-Modelle (Open/Big Barn + Fence/Fence_big = Zäune genutzt)
   models/world/*.glb      # Grass Patch.glb + grass yellowing.glb (Gras); Fertile soil.glb ungenutzt
   models/ui/*.glb         # Coin.glb, Coin Piles.glb
-  sounds/*.wav|*.mp3      # SFX + Musik (Mixkit, siehe CREDITS.md)
+  sounds/*.mp3            # Musik + Ambience + Tierrufe (sounds/animals/<id>.mp3); Mixkit, siehe CREDITS.md
+  sounds/*.wav            # SFX (collect/unlock/purchase/build)
 ```
 
 ---
@@ -79,9 +84,11 @@ Die App trennt **persistente Infrastruktur** von einem **austauschbaren Spiel**:
   `AbortController` (`signal` wird an Picker/Menüs durchgereicht); `dispose()`
   ruft `abort()` → automatische Abmeldung, keine Leaks beim Spielwechsel.
 
-**Loop** ([main.ts](../src/main.ts)): `session?.update(dt,tSec)` (Produktion),
+**Loop** ([main.ts](../src/main.ts)): `session?.update(dt,tSec)`,
 `coinBurst.update`, `grass.update(tSec)` (Wind), `sky.update(dt)` (Tag/Nacht),
-`dayNight.update(sky.timeOfDay)`.
+`clouds.update(dt, sky.daylight)` (Wolken/Schatten), `dayNight.update(sky.timeOfDay)`.
+`session.update` selbst tickt Produktion (`world.update`), die Hintergrund-Rufe
+(`ambient.update`) **und** die Deko-Critter (`critters.update`).
 
 **Datenfluss innerhalb einer Session:** `GameState` ist reine Daten +
 `onChange`-Events. `World` liest den State und baut die Szene. UI-Komponenten
@@ -151,7 +158,9 @@ und Eat (3–6 s) per Crossfade umgeschaltet. Clip-Auswahl:
 - Idle: exakt `idle`, sonst `…|idle`, sonst best-effort (ohne „react"/„jump").
 - Eat: enthält `eat`, aber **nicht** `death` (sonst matcht „Death" fälschlich).
 
-> Verfügbare, noch ungenutzte Modelle: `Cat.glb` (nicht gerigt).
+> **Deko-Critter** (keine kaufbaren Tiere, nicht im Katalog): `Shiba Inu.glb`
+> (streunender Hund) und `Frog.glb` (Frösche) werden separat geladen und vom
+> `CritterManager` animiert bewegt — siehe **§19**. Ungenutztes Modell: `Husky.glb`.
 
 ---
 
@@ -171,6 +180,7 @@ Definiert in [src/game/config/buildings.ts](../src/game/config/buildings.ts) als
 | `roofMaterials?` | Material-Namen, die als „Dach" beim Nah-Zoom ausgeblendet werden |
 | `fadeAll?` | beim Nah-Zoom das **ganze** Gebäude ausblenden (für geschlossene Gebäude) |
 | `slotInset?` | Rand-Abstand des Slot-Rasters (x & z); größer = Slots weiter innen |
+| `icon?` | Emoji im Bau-Menü (Default 🏠); z.B. `🚧` für Zäune |
 
 **Aktueller Katalog:**
 
@@ -178,10 +188,39 @@ Definiert in [src/game/config/buildings.ts](../src/game/config/buildings.ts) als
 |----|------|------|-------|-------------|--------|------|
 | `stall` | Stall | 120 | 8 | 10×10 | Open Barn.glb (offen) | nur Dach (`RoofBlack`) |
 | `scheune` | Große Scheune | 300 | 16 | 14×14 | Big Barn.glb (geschlossen) | ganzes Gebäude (`fadeAll`) |
+| `zaun` | Zaun | 15 | 0 | 6×1 | Fence.glb | – (`fadeAll:false`) |
+| `zaun_gross` | Großer Zaun | 30 | 0 | 6×1 | Fence_big.glb | – (`fadeAll:false`) |
+
+**Deko-Objekte (`slotCount: 0`)** wie Zäune liefern ein **leeres** Slot-Raster
+(`computeSlotPositions` läuft 0×) → keine Tier-Plätze, keine Slot-Marker. Ansonsten
+durchlaufen sie dieselbe Pipeline (Laden/Normalisieren/Platzieren) wie Gebäude.
 
 **Orientierung:** Die offene/Vorderseite sollte nach **+z** zeigen (Richtung
 Standard-Kamera). Stimmt das Modell nicht, `modelRotation` setzen (z.B. `Math.PI`).
 Drehen über das Gebäude-Menü rotiert Modell **und** Slot-Raster.
+
+### 5.1 Platzierung (PlacementController)
+
+[PlacementController.ts](../src/scene/PlacementController.ts) zeigt eine
+durchscheinende Silhouette (grün = ok, rot = ungültig), die dem Boden-Cursor folgt;
+Linksklick platziert, Rechtsklick/ESC bricht ab. Während des Modus ist die
+Kamera-Steuerung aus.
+
+- **Drehen mit `R`**: dreht Silhouette + zu platzierendes Objekt in 90°-Schritten.
+  Die Drehung wird über `onBuild(defId,x,z,rotation)` / `onMove(i,x,z,rotation)`
+  durchgereicht und in `GameState.addBuilding` / `moveBuilding` gespeichert. Beim
+  **Verschieben** startet die Drehung mit der aktuellen Gebäude-Rotation.
+- **Zaun-Snapping**: Beim Platzieren eines Deko-Objekts (`slotCount === 0`) rastet
+  das nächstgelegene **Ende** innerhalb `SNAP_DIST (=2.5)` exakt am Ende eines
+  bereits platzierten Zauns ein (`fenceEnds`/`snapFence`). So entstehen lückenlose
+  Reihen, Ecken und parallele Zäune.
+- **Kollision (`isValid`)** nutzt **gedrehte** AABB-Halbausdehnungen (`halfExtents`,
+  90°/270° tauscht width/depth) für Feldgrenze (`FIELD_HALF = 45`) und Overlap:
+  - Gebäude ↔ Gebäude: Mindestabstand `SPACING_MARGIN = 1.5`.
+  - Zaun ↔ Gebäude: darf **dicht** anschließen (Toleranz `-0.05`), aber nicht *in*
+    einem Stall stehen.
+  - **Zaun ↔ Zaun: kein Overlap-Check** — Zäune blockieren sich nicht gegenseitig
+    (frei aneinander/über Eck/parallel; Snapping richtet die Enden aus).
 
 **Material-Klassifikation:** Bei beiden Barns sind die roten Flächen
 (`DarkRed`/`LightRed`) **Wände**, das **Dach** ist `RoofBlack`. Für roof-only-Fade
@@ -293,6 +332,9 @@ Wichtige Details (zwei behobene Bugs, nicht regressen lassen):
   `ambient 0.07 + day·0.45`), plus `scene.fog`-Farbe (Tag/Dämmerung/Nacht).
 - **Sterne**: `THREE.Points` (additives Blending, ~2600, innerhalb der Sky-Box),
   Opazität blendet nachts ein.
+- **`daylight ∈ [0,1]`**: in `apply()` mitgesetzter Tageslicht-Faktor (0 = Nacht,
+  1 = heller Tag). Wird in der Loop an `clouds.update(dt, sky.daylight)` gegeben, um
+  die Wolkenschatten tagsüber ein- und nachts auszublenden (**§20**).
 - **HUD**: Phasen-Emoji (🌅 ☀️ 🌇 🌙) + Uhrzeit `HH:MM` + Farbverlaufs-Balken mit
   Marker (`#daynight` in [index.html](../index.html)/[styles.css](../src/ui/styles.css)).
 
@@ -313,6 +355,8 @@ löst nichts aus):
 Pickbare Meshes tragen `userData: PickData { kind, slotIndex?, buildingIndex? }`.
 **Klick-Durchlass:** Meshes mit `transparent && opacity < 0.5` werden ignoriert —
 so klickt man durch ein ausgeblendetes (gezoomtes) Dach auf Tiere/Münzen.
+Der Raycaster prüft **nur** die von `world.pickables()` gelieferte Liste; Deko-Critter
+(Hund/Frösche) stehen nicht darin und stören Ernten/Verkaufen daher nicht.
 
 ---
 
@@ -362,10 +406,23 @@ PY
 
 ## 14. Audio
 
-[AudioManager.ts](../src/audio/AudioManager.ts): Musik-Loop + SFX. Autoplay startet
-erst nach erster Nutzergeste. Mute-Button im HUD. SFX: `collect`, `unlock`,
-`purchase`, `build` (+ leiser `playRoad`). Lizenz:
-[public/sounds/CREDITS.md](../public/sounds/CREDITS.md) (Mixkit Free License).
+[AudioManager.ts](../src/audio/AudioManager.ts): zwei Loops + SFX. Autoplay startet
+erst nach erster Nutzergeste (Pointer/Tastendruck); Mute-Button im HUD pausiert/
+startet beide Loops.
+
+- **Loops**: `farm-music.mp3` (Hintergrundmusik, vol 0.3) **und** `farm-ambience.mp3`
+  (leise Bauernhof-Kulisse, vol 0.18).
+- **SFX**: `collect`, `unlock`, `purchase`, `build` (+ leiser `playRoad`).
+- **Tierrufe**: `playAnimalCall(id, vol)` spielt `sounds/animals/<id>.mp3`
+  (`id` = Tier-`id` aus dem Katalog). Genutzt
+  (a) **laut** beim Anklicken eines Tiers ([GameSession](../src/game/GameSession.ts)
+  `onAnimal`, vol 0.55) und
+  (b) **leise** als zufällige Hintergrund-Rufe der vorhandenen Tiere
+  ([AmbientAnimals.ts](../src/audio/AmbientAnimals.ts), vol 0.22; pro Session,
+  Timer 8–20 s, zieht eine zufällige `animalId` aus den belegten Slots).
+- Fehlt eine Sound-Datei, passiert nichts (`play().catch()` schluckt den Fehler).
+- Lizenz/Quellen: [public/sounds/CREDITS.md](../public/sounds/CREDITS.md)
+  (Mixkit Free License). Neues Tier ⇒ optional `sounds/animals/<id>.mp3` ergänzen.
 
 ---
 
@@ -438,7 +495,9 @@ Nützliche Hooks: `session.world.bubbleWorldPos(i)` (Welt-Pos einer Münze),
 `session.world.animalClip(i)` (laufender Clip), `session.state.slotBase(b)`,
 `sky.timeOfDay`/`sky.speed` (Tageszeit steuern/anhalten),
 `grass.cullables` (sichtbare/Gesamt-Instanzen prüfen),
-`sceneManager.camera/controls` (Kamera für Screenshots).
+`sceneManager.camera/controls` (Kamera für Screenshots),
+`session.critters.dog.object.position` / `session.critters.frogs` (Hund/Frösche),
+`session.placement` (`begin(def)`, `rotation`, `isValid(x,z)` für Platzierungs-Tests).
 
 ---
 
@@ -459,6 +518,13 @@ Nützliche Hooks: `session.world.bubbleWorldPos(i)` (Welt-Pos einer Münze),
 3. Verifizieren (§16): Skalierung/Orientierung, Slots **im** Gebäude auf dem Boden,
    Zoom-Fade, Rechtsklick-Menü, Drehen rotiert Modell+Slots, **Gras innen weg**.
 
+**Deko-Objekt (Zaun-artig):** Eintrag mit `slotCount: 0` (+ `icon`); platzierbar/
+drehbar/snappbar ohne weiteren Code (§5.1). Blockiert den Hund automatisch (§19).
+
+**Deko-Critter (Hund/Frosch o.ä.):** GLB nach `public/models/animals/`, Eintrag in
+`DECOR` ([AnimalModels.ts](../src/scene/AnimalModels.ts)) → über `models.get(id)`/
+`getClips(id)` nutzbar; Bewegung/Animation im `CritterManager` (§19) ergänzen.
+
 ---
 
 ## 18. Bekannte Stolpersteine
@@ -472,4 +538,62 @@ Nützliche Hooks: `session.world.bubbleWorldPos(i)` (Welt-Pos einer Münze),
   damit beim Spielwechsel nichts leakt.
 - **Debug-Hook**: State/World liegen unter `__game.session` (nur wenn ein Spiel läuft).
 - **pnpm** nutzen; `esbuild`-Build-Freigabe steht in `pnpm-workspace.yaml`.
-```
+- **Critter-Nav vs. dünne Hindernisse**: Das Nav-Gitter (Zelle 2) prüft
+  **zellüberlappend** (`cellHalf = CELL/2`), nicht nur Zell-Mittelpunkte — sonst
+  rutschen Tiere durch dünne Zäune (§19). Die „Tür"-Lücke gilt nur für Ställe
+  (`slotCount > 0`); Zäune blockieren ganz.
+- **Zäune blockieren sich nicht gegenseitig** (Platzierung, §5.1) — bewusst, damit
+  Ecken/Reihen baubar sind. Nicht „reparieren".
+
+---
+
+## 19. Deko-Critter: Hund & Frösche
+
+[Critters.ts](../src/scene/Critters.ts) (`CritterManager`, **pro Session** in
+[GameSession.ts](../src/game/GameSession.ts) erzeugt/`update`d/`dispose`d). Liest
+direkt `state.buildings` (Footprints) und `state.roads`; das Nav-Gitter wird beim
+nächsten Wegfinden neu aufgebaut (immer aktuell, keine Subscription). Modelle aus
+`DECOR` (§13): `shiba` (size 1.5), `frog` (0.45). Beide werfen Schatten (`castShadow`)
+und sind **nicht** anklickbar (§11).
+
+**Hund (`Dog`)** — ein Shiba, streift den Hof ab:
+- Zustände `walk ↔ pause`; Pause spielt Idle/Idle_2/Eating (Schnüffeln/Grasen),
+  weite Ziele werden im `gallop` angesteuert. Ausrichtung dreht weich
+  (`lerpAngle`). Clip-Auswahl über `makeAction` (exakt → `|name` → Teilstring,
+  damit `idle` nicht `Idle_HitReact` trifft).
+- **Pathfinding**: grobes Belegungs-Gitter (`AREA = 40`, `CELL = 2`) + **A\***
+  (`planPath`, 8-Nachbarschaft). Gebäude-Footprints (gedreht) sind blockiert; Ställe
+  haben eine **Tür-Lücke** an der offenen Vorderseite (lokales +z, `DOOR_HALF`),
+  sodass der Hund hinein **und** wieder heraus findet. Zäune blockieren komplett.
+- **Höhe**: im Gebäude-Footprint auf `FLOOR_TOP_Y`, sonst y=0 (weich interpoliert) →
+  kein Einsinken im Stall.
+
+**Frösche (`FrogSpawner`)**:
+
+- Spawnen **nur bei vorhandenen Straßen**, **selten** (Timer 20–45 s) und **max. 2**.
+- Ablauf: Start im Gras neben einer zufälligen Straßen-Kachel → in Sprüngen
+  (`Frog_Jump`, Parabel-Bogen pro Hüpfer) auf die Straße → ein Stück **entlang des
+  Straßenverlaufs** (Richtung aus Nachbarzellen) → auf der anderen Seite ins Gras →
+  entfernen. Jeder Frosch ist ein eigenständiges, kurzlebiges Objekt.
+
+> Blickrichtung: Modelle werden über `rotation.y = atan2(dir.x, dir.z)` ausgerichtet
+> (Vorderseite +z). Stimmt sie nicht, einen Offset in `Dog`/`Frog` ergänzen.
+
+---
+
+## 20. Wolken & Bodenschatten
+
+[Clouds.ts](../src/scene/Clouds.ts) (`CloudManager`, **Teil des Rigs**, in
+[main.ts](../src/main.ts) erzeugt, `update(dt, sky.daylight)` in der Loop).
+
+- **Wolken**: `CLOUD_COUNT (12)` Gruppen aus mehreren abgeflachten Low-Poly-Kugeln
+  (`IcosahedronGeometry`, geteiltes `MeshStandardMaterial`) in Höhe `CLOUD_HEIGHT`,
+  driften mit `WIND` über `±SPREAD` und wrappen am Rand. Da sie auf Szenenlicht
+  reagieren, dunkeln sie nachts automatisch mit ab.
+- **Bodenschatten**: pro Wolke ein flaches Plane bei y≈0.06 mit weicher radialer
+  Alpha-Textur (Canvas-Gradient), das synchron mitzieht. Bewusst **gefälschte
+  Decals** statt Shadow-Map (performant, sauber, sonnenstand-unabhängig).
+- **Nacht**: Schatten-Opazität skaliert mit `sky.daylight` → nachts unsichtbar.
+
+> Stellschrauben oben in der Datei: `CLOUD_COUNT` (Dichte), `CLOUD_HEIGHT` (Höhe),
+> `WIND` (Tempo/Richtung), `SHADOW_MAX_OPACITY` (Schatten-Stärke).
