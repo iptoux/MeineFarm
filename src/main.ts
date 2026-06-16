@@ -45,6 +45,7 @@ async function init(): Promise<void> {
     sceneManager.hemi,
     sceneManager.ambient,
   );
+  await sky.ready;
 
   // Ziehende Wolken mit weichen Bodenschatten
   const clouds = new CloudManager(sceneManager.scene);
