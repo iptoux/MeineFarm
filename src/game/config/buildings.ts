@@ -22,7 +22,14 @@ export interface BuildingDef {
   slotInset?: number;
   /** Optional: Emoji im Bau-Menü (Default 🏠). */
   icon?: string;
+  /** Optional: dieses „Gebäude" ist ein Feld (Wachstums-Zyklus, Ernte statt Slots). */
+  isField?: boolean;
+  /** Kategorie im Bau-Menü (gruppiert die Karten im Popover). */
+  category: BuildCategory;
 }
+
+/** Gruppen im Bau-Menü. */
+export type BuildCategory = "tiere" | "farm" | "zaun";
 
 export const BUILDINGS: BuildingDef[] = [
   {
@@ -37,6 +44,7 @@ export const BUILDINGS: BuildingDef[] = [
     // Beim Nah-Zoom das ganze Gebäude ausblenden (wie die Große Scheune) – nur das
     // Dach reicht nicht, da darunter noch eine rote Schicht sichtbar bliebe.
     fadeAll: true,
+    category: "tiere",
   },
   {
     id: "scheune",
@@ -49,6 +57,7 @@ export const BUILDINGS: BuildingDef[] = [
     model: "/models/buildings/Big Barn.glb",
     fadeAll: true,
     slotInset: 3.4,
+    category: "tiere",
   },
   {
     id: "zaun",
@@ -61,6 +70,7 @@ export const BUILDINGS: BuildingDef[] = [
     model: "/models/buildings/Fence.glb",
     fadeAll: false,
     icon: "🚧",
+    category: "zaun",
   },
   {
     id: "zaun_gross",
@@ -73,6 +83,47 @@ export const BUILDINGS: BuildingDef[] = [
     model: "/models/buildings/Fence_big.glb",
     fadeAll: false,
     icon: "🚧",
+    category: "zaun",
+  },
+  {
+    id: "feld",
+    name: "Feld",
+    cost: 50,
+    slotCount: 0,
+    width: 6,
+    depth: 6,
+    roofColor: 0x6b4a2b,
+    model: "/models/farm/Farm Dirt.glb",
+    fadeAll: false,
+    icon: "🌱",
+    isField: true,
+    category: "farm",
+  },
+  {
+    id: "marktstand",
+    name: "Marktstand",
+    cost: 250,
+    slotCount: 0,
+    width: 8,
+    depth: 6,
+    roofColor: 0x9a5a2a,
+    model: "/models/buildings/Market Stalls.glb",
+    fadeAll: false,
+    icon: "🛒",
+    category: "farm",
+  },
+  {
+    id: "vogelscheuche",
+    name: "Vogelscheuche",
+    cost: 20,
+    slotCount: 0,
+    width: 1.6,
+    depth: 1.6,
+    roofColor: 0x8a6a3a,
+    model: "/models/farm/Scarecrow.glb",
+    fadeAll: false,
+    icon: "🧑‍🌾",
+    category: "farm",
   },
 ];
 

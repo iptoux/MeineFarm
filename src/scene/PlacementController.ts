@@ -29,6 +29,16 @@ export interface PlacementHandlers {
 /** Abstand, in dem Zaun-Enden beim Platzieren aneinander einrasten. */
 const SNAP_DIST = 2.5;
 
+/** Echter Zaun: Deko ohne Slots, aber kein Feld (Felder snappen nicht). */
+function isFence(def: BuildingDef): boolean {
+  return def.slotCount === 0 && !def.isField;
+}
+
+/** Eng packbar (Zaun oder Feld): darf ohne Mindestabstand dicht anschließen. */
+function isTightPackable(def: BuildingDef): boolean {
+  return isFence(def) || !!def.isField;
+}
+
 /**
  * Platzierungs-Modus für neue UND bestehende Gebäude: zeigt eine durchscheinende
  * Silhouette, die dem Boden-Cursor folgt (grün = ok, rot = nicht), und bestätigt
@@ -170,7 +180,7 @@ export class PlacementController {
   private resolvePoint(e: PointerEvent): { x: number; z: number } | null {
     const p = this.groundPoint(e);
     if (!p) return null;
-    if (this.mode && this.mode.def.slotCount === 0) {
+    if (this.mode && isFence(this.mode.def)) {
       const snapped = this.snapFence(p.x, p.z);
       if (snapped) return snapped;
     }
@@ -189,7 +199,7 @@ export class PlacementController {
       if (i === selfIndex) continue;
       const b = this.state.buildings[i];
       const other = getBuilding(b.defId);
-      if (!other || other.slotCount !== 0) continue; // nur an andere Zäune snappen
+      if (!other || !isFence(other)) continue; // nur an andere Zäune snappen
       const otherEnds = fenceEnds(b.x, b.z, b.rotation, other.width);
       for (const ge of ghostEnds) {
         for (const oe of otherEnds) {
@@ -221,10 +231,11 @@ export class PlacementController {
       if (!other) continue;
       // Zäune (Deko ohne Slots) blockieren sich NICHT gegenseitig: man darf sie frei
       // aneinanderreihen, über Eck setzen oder parallel bauen (Snapping richtet sie aus).
-      if (def.slotCount === 0 && other.slotCount === 0) continue;
+      if (isFence(def) && isFence(other)) continue;
       const [ohw, ohd] = halfExtents(other, b.rotation);
-      // Zaun an Gebäude: darf dicht anschließen (minimale Toleranz statt voller Abstand).
-      const margin = def.slotCount === 0 || other.slotCount === 0 ? -0.05 : SPACING_MARGIN;
+      // Eng packbar (Zaun/Feld): darf dicht anschließen (kein Mindestabstand). So lassen
+      // sich Felder Kante an Kante zu einem Acker zusammensetzen, ohne sich zu überlappen.
+      const margin = isTightPackable(def) || isTightPackable(other) ? -0.05 : SPACING_MARGIN;
       const minDx = halfW + ohw + margin;
       const minDz = halfD + ohd + margin;
       if (Math.abs(x - b.x) < minDx && Math.abs(z - b.z) < minDz) return false;

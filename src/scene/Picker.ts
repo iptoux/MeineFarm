@@ -17,6 +17,8 @@ export interface PickerHandlers {
   onBuilding: (buildingIndex: number, screen: { x: number; y: number }) => void;
   /** Linksklick auf den streunenden Hund (Hunde-Menü). */
   onDog: (screen: { x: number; y: number }) => void;
+  /** Linksklick auf die reife Kürbis-Blase eines Feldes (ernten). */
+  onField: (buildingIndex: number, screen: { x: number; y: number }) => void;
 }
 
 /**
@@ -80,6 +82,8 @@ export class Picker {
       this.handlers.onMarker(data.slotIndex, screen);
     } else if (data.kind === "animal" && data.slotIndex !== undefined) {
       this.handlers.onAnimal(data.slotIndex, screen);
+    } else if (data.kind === "field" && data.buildingIndex !== undefined) {
+      this.handlers.onField(data.buildingIndex, screen);
     } else if (data.kind === "dog") {
       this.handlers.onDog(screen);
     }

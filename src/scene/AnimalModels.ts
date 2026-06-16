@@ -2,10 +2,18 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { ANIMALS } from "../game/config/animals";
-import { BUILDINGS } from "../game/config/buildings";
+import { BUILDINGS, getBuilding } from "../game/config/buildings";
+import {
+  FIELD_ID,
+  FIELD_MODELS,
+  PUMPKIN_MODEL,
+  type FieldStateName,
+} from "../game/config/fields";
 
 const COIN_SIZE = 0.7;
 const HEART_SIZE = 0.4;
+/** Größe der schwebenden Ernte-Kürbis-Blase (wie die Münze). */
+const PUMPKIN_SIZE = 0.7;
 
 const COIN_URL = "/models/ui/Coin.glb";
 const COIN_PILE_URL = "/models/ui/Coin Piles.glb";
@@ -26,8 +34,11 @@ export class AnimalModels {
   private templates = new Map<string, THREE.Object3D>();
   private clips = new Map<string, THREE.AnimationClip[]>();
   private buildings = new Map<string, THREE.Object3D>();
+  private fieldModels = new Map<FieldStateName, THREE.Object3D>();
   private coin: THREE.Object3D | null = null;
   private coinPile: THREE.Object3D | null = null;
+  private pumpkin: THREE.Object3D | null = null;
+  private pumpkinIcon: THREE.Object3D | null = null;
   private heart: THREE.Object3D | null = null;
 
   async load(): Promise<void> {
@@ -73,6 +84,36 @@ export class AnimalModels {
           this.coinPile = this.normalize(gltf.scene, 1, false);
         } catch {
           /* kein Icon */
+        }
+      })(),
+      // Feld-Zustandsmodelle (auf die Feld-Grundfläche skaliert, wie Gebäude).
+      ...(() => {
+        const def = getBuilding(FIELD_ID);
+        const w = def?.width ?? 6;
+        const d = def?.depth ?? 6;
+        return (Object.keys(FIELD_MODELS) as FieldStateName[]).map(async (s) => {
+          try {
+            const gltf = await loader.loadAsync(FIELD_MODELS[s]);
+            this.fieldModels.set(s, this.normalizeBuilding(gltf.scene, w, d, def?.modelRotation ?? 0));
+          } catch {
+            /* ohne Modell greift der Primitive-Fallback in FieldEntity */
+          }
+        });
+      })(),
+      (async () => {
+        try {
+          const gltf = await loader.loadAsync(PUMPKIN_MODEL);
+          this.pumpkin = this.normalize(gltf.scene, PUMPKIN_SIZE, false);
+        } catch {
+          /* Fallback-Kugel in FieldEntity */
+        }
+      })(),
+      (async () => {
+        try {
+          const gltf = await loader.loadAsync(PUMPKIN_MODEL);
+          this.pumpkinIcon = this.normalize(gltf.scene, 1, false);
+        } catch {
+          /* kein HUD-Icon */
         }
       })(),
       (async () => {
@@ -182,6 +223,32 @@ export class AnimalModels {
   /** Vorlage des Münzhaufens für das HUD-Icon (oder null). */
   getCoinPile(): THREE.Object3D | null {
     return this.coinPile ? this.coinPile.clone(true) : null;
+  }
+
+  /** Klon des Feld-Modells für den gegebenen Zustand (mit geklonten Materialien) oder null. */
+  getFieldModel(state: FieldStateName): THREE.Object3D | null {
+    const t = this.fieldModels.get(state);
+    if (!t) return null;
+    const c = t.clone(true);
+    c.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.material = (o.material as THREE.Material).clone();
+    });
+    return c;
+  }
+
+  /** Klon der Kürbis-Blase (mit geklonten Materialien) oder null. */
+  getPumpkin(): THREE.Object3D | null {
+    if (!this.pumpkin) return null;
+    const c = this.pumpkin.clone(true);
+    c.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.material = (o.material as THREE.Material).clone();
+    });
+    return c;
+  }
+
+  /** Vorlage des Kürbisses für das HUD-Icon (oder null). */
+  getPumpkinIcon(): THREE.Object3D | null {
+    return this.pumpkinIcon ? this.pumpkinIcon.clone(true) : null;
   }
 
   /** Klon-Instanz des Herzens (für den Streichel-Effekt) oder null. */

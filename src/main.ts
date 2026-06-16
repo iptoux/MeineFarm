@@ -22,7 +22,7 @@ import { StartMenu } from "./ui/StartMenu";
 import { AudioManager } from "./audio/AudioManager";
 
 /** UI-Elemente, die nur im laufenden Spiel sichtbar sein sollen (nicht im Menü). */
-const GAME_UI_IDS = ["hud", "mute-btn", "menu-btn", "daynight", "hint", "build-menu"];
+const GAME_UI_IDS = ["hud", "hud-pumpkins", "mute-btn", "menu-btn", "daynight", "hint", "build-menu"];
 
 function showGameUi(show: boolean): void {
   for (const id of GAME_UI_IDS) {
@@ -88,6 +88,13 @@ async function init(): Promise<void> {
   if (pile) {
     const icon = document.getElementById("money-icon") as HTMLImageElement;
     icon.src = renderIcon(pile, 96);
+  }
+
+  // HUD-Kürbis-Icon aus dem Kürbis-Modell rendern
+  const pumpkinIcon = models.getPumpkinIcon();
+  if (pumpkinIcon) {
+    const icon = document.getElementById("pumpkin-icon") as HTMLImageElement;
+    icon.src = renderIcon(pumpkinIcon, 96);
   }
 
   const muteBtn = document.getElementById("mute-btn") as HTMLButtonElement;

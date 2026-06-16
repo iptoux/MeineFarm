@@ -4,8 +4,11 @@ import { getAnimal } from "../game/config/animals";
 import { getBuilding } from "../game/config/buildings";
 import { ROAD_TILE, getRoad, roadCellCenter, worldToCell } from "../game/config/roads";
 import { tickPending } from "../game/economy";
+import { NEUTRAL_WEATHER_FACTOR, WEATHER_GROWTH_FACTOR } from "../game/config/fields";
+import type { WeatherKind } from "./Weather";
 import { createBuilding, createModelBuilding } from "./Building";
 import { SlotEntity, type PickData } from "./SlotEntity";
+import { FieldEntity } from "./FieldEntity";
 import type { AnimalModels } from "./AnimalModels";
 import type { Grass } from "./Grass";
 import type { Trees } from "./Trees";
@@ -21,6 +24,8 @@ const GRASS_BUILD_MARGIN = 0.1;
  */
 export class World {
   private entities: SlotEntity[] = [];
+  /** Feld-Entities, indexiert nach Gebäude-Index (nur für def.isField). */
+  private fieldEntities = new Map<number, FieldEntity>();
   private buildingGroups: THREE.Group[] = [];
   private buildingMeshes: THREE.Mesh[] = [];
   private roadGroup = new THREE.Group();
@@ -44,7 +49,12 @@ export class World {
   rebuild(): void {
     for (const g of this.buildingGroups) this.scene.remove(g);
     for (const e of this.entities) this.scene.remove(e.group);
+    for (const fe of this.fieldEntities.values()) {
+      this.scene.remove(fe.group);
+      fe.dispose();
+    }
     this.entities = [];
+    this.fieldEntities.clear();
     this.buildingGroups = [];
     this.buildingMeshes = [];
     this.roofMeshes.length = 0; // gleiche Referenz behalten (Zoom-Fade)
@@ -60,7 +70,12 @@ export class World {
   dispose(): void {
     for (const g of this.buildingGroups) this.scene.remove(g);
     for (const e of this.entities) this.scene.remove(e.group);
+    for (const fe of this.fieldEntities.values()) {
+      this.scene.remove(fe.group);
+      fe.dispose();
+    }
     this.entities = [];
+    this.fieldEntities.clear();
     this.buildingGroups = [];
     this.buildingMeshes = [];
     this.roofMeshes.length = 0;
@@ -76,6 +91,17 @@ export class World {
     const placed = this.state.buildings[buildingIndex];
     const def = getBuilding(placed.defId);
     if (!def) return;
+
+    // Felder: eigene Entity mit Wachstums-Modell + Kürbis-Blase (keine Slots).
+    if (def.isField) {
+      const fe = new FieldEntity(buildingIndex, { x: placed.x, z: placed.z }, placed.rotation, this.models);
+      this.scene.add(fe.group);
+      this.fieldEntities.set(buildingIndex, fe);
+      // Anfangszustand sofort darstellen.
+      if (placed.field) fe.update(placed.field, 0, 0);
+      this.cullGrass();
+      return;
+    }
 
     const pos = { x: placed.x, z: placed.z };
     const model = this.models.getBuildingModel(def.id);
@@ -173,15 +199,33 @@ export class World {
       if (slot.animalId && def) slot.pending = tickPending(def, slot.pending, dt);
       this.entities[i].update(slot, def, dt, tSec);
     }
+
+    // Felder wachsen anhand des aktuellen Wetters und zeigen ihren Zustand.
+    if (this.fieldEntities.size > 0) {
+      const factor = WEATHER_GROWTH_FACTOR[this.state.weather as WeatherKind] ?? NEUTRAL_WEATHER_FACTOR;
+      for (const [index, fe] of this.fieldEntities) {
+        const placed = this.state.buildings[index];
+        if (!placed?.field) continue;
+        this.state.tickField(placed, dt, factor);
+        fe.update(placed.field, dt, tSec);
+      }
+    }
   }
 
-  /** Anklickbare Objekte: zuerst Slot-Marker/Blasen, dann Gebäude-Struktur. */
+  /** Anklickbare Objekte: Slot-Marker/Blasen, Feld-Basis/Kürbisse, dann Gebäude-Struktur. */
   pickables(): THREE.Object3D[] {
-    return [...this.entities.flatMap((e) => e.pickables()), ...this.buildingMeshes];
+    const fieldPickables: THREE.Object3D[] = [];
+    for (const fe of this.fieldEntities.values()) fieldPickables.push(...fe.pickables());
+    return [...this.entities.flatMap((e) => e.pickables()), ...fieldPickables, ...this.buildingMeshes];
   }
 
   bubbleWorldPos(globalIndex: number): THREE.Vector3 {
     return this.entities[globalIndex].getBubbleWorldPos();
+  }
+
+  /** Weltposition der Kürbis-Blase eines Feldes (für den Ernte-Effekt). */
+  pumpkinWorldPos(buildingIndex: number): THREE.Vector3 | null {
+    return this.fieldEntities.get(buildingIndex)?.getPumpkinWorldPos() ?? null;
   }
 
   /** Aktuell laufender Animations-Clip eines Tiers (für Tests/Debug). */

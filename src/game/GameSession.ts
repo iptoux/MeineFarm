@@ -25,7 +25,7 @@ import { BuildingMenu } from "../ui/BuildingMenu";
 import { AnimalMenu } from "../ui/AnimalMenu";
 import { FieldMenu } from "../ui/FieldMenu";
 import { DogMenu } from "../ui/DogMenu";
-import { floatMoney } from "../ui/Effects";
+import { floatMoney, floatPumpkins } from "../ui/Effects";
 
 import { AudioManager } from "../audio/AudioManager";
 import { AmbientAnimals } from "../audio/AmbientAnimals";
@@ -191,14 +191,18 @@ export class GameSession {
     );
 
     // Bau-Menü unten: Gebäude → Platzieren, Straße → Straßen-Modus
-    new BuildMenu(this.state, (id) => {
-      if (getRoad(id)) {
-        this.roadController.begin(id);
-      } else {
-        const def = getBuilding(id);
-        if (def) this.placement.begin(def);
-      }
-    });
+    new BuildMenu(
+      this.state,
+      (id) => {
+        if (getRoad(id)) {
+          this.roadController.begin(id);
+        } else {
+          const def = getBuilding(id);
+          if (def) this.placement.begin(def);
+        }
+      },
+      signal,
+    );
 
     // Klick-Interaktion (während Platzier-/Straßen-Modus blockiert)
     new Picker(
@@ -222,6 +226,15 @@ export class GameSession {
           this.animalMenu.openForSlot(index, screen);
         },
         onBuilding: (index, screen) => this.buildingMenu.openForBuilding(index, screen),
+        onField: (index, screen) => {
+          const gained = this.state.harvestField(index);
+          if (gained > 0) {
+            audio.playCollect();
+            floatPumpkins(gained, screen.x, screen.y);
+            const pos = this.world.pumpkinWorldPos(index);
+            if (pos) coinBurst.spawn(pos);
+          }
+        },
         onDog: () => {
           const p = this.critters.selectDog(sceneManager.camera.position);
           if (p) sceneManager.focusOn(p);
@@ -255,12 +268,13 @@ export class GameSession {
 
   /** Wird pro Frame von der Rig-Schleife aufgerufen (Produktion + Erntefortschritt). */
   update(dt: number, tSec: number): void {
+    // Tageszeit + Wetter aus dem Rig spiegeln, BEVOR die Welt tickt: das Feld-Wachstum
+    // liest `state.weather` für den Ertrag; außerdem schreibt der Autosave beide mit.
+    this.state.timeOfDay = this.rig.sky.timeOfDay;
+    this.state.weather = this.rig.weather.target;
     this.world.update(dt, tSec);
     this.ambient.update(dt);
     this.critters.update(dt);
-    // Tageszeit + Wetter aus dem Rig spiegeln, damit der Autosave sie mitschreibt.
-    this.state.timeOfDay = this.rig.sky.timeOfDay;
-    this.state.weather = this.rig.weather.target;
   }
 
   /** Baut das Spiel sauber ab: speichert, hängt Listener ab, räumt die Szene auf. */

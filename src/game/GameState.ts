@@ -1,5 +1,11 @@
 import { getAnimal } from "./config/animals";
 import { getBuilding } from "./config/buildings";
+import {
+  GROW_TO_GROWING_SEC,
+  GROW_TO_READY_SEC,
+  yieldFromWeather,
+  type FieldStateName,
+} from "./config/fields";
 import { randomDogName } from "./config/dognames";
 import { getRoad, ROAD_TILE, roadCellCenter } from "./config/roads";
 import { STARTING_UNLOCKED, STARTING_MONEY, slotUnlockCost } from "./config/slots";
@@ -21,12 +27,30 @@ export interface SlotState {
   pending: number;
 }
 
+/** Wachstumszustand eines Feldes (nur bei Feld-Gebäuden gesetzt). */
+export interface FieldGrowth {
+  state: FieldStateName;
+  /** Im aktuellen Zustand angesammelte Sekunden (zählt nur bis zum Übergang). */
+  progress: number;
+  /** Summe aus Wetterfaktor × Zeit über den Wachstumszeitraum (für den Ertrag). */
+  weatherSum: number;
+  /** Vergangene Wachstumszeit in Sekunden (Nenner für den Wetter-Durchschnitt). */
+  weatherTime: number;
+}
+
 export interface PlacedBuilding {
   defId: string;
   x: number;
   z: number;
   /** Drehung um die Hochachse in Radiant (Vielfache von 90°). */
   rotation: number;
+  /** Wachstumszustand — nur bei Feldern (def.isField). */
+  field?: FieldGrowth;
+}
+
+/** Frischer Feld-Zustand (Bau-Phase, alles auf null). */
+export function freshFieldGrowth(): FieldGrowth {
+  return { state: "dirt", progress: 0, weatherSum: 0, weatherTime: 0 };
 }
 
 /** Dekorative Straßen-Kachel (Gitterzelle + Typ). */
@@ -45,6 +69,8 @@ export interface SaveData {
   roads: RoadTile[];
   /** Spielfeld-Grenzen (seit v3; bei v2-Ständen fehlt es → Default). */
   field: FieldBounds;
+  /** Gesammelte Kürbisse (seit Feld-Feature; bei alten Ständen fehlt es → 0). */
+  pumpkins?: number;
   /** Tageszeit [0,1) zum Speicherzeitpunkt. */
   timeOfDay: number;
   /** Wetterlage zum Speicherzeitpunkt ("clear" | "rain" | "storm" | "fog"). */
@@ -68,6 +94,8 @@ function makeSlot(unlocked = false, animalId: string | null = null): SlotState {
  */
 export class GameState {
   money = STARTING_MONEY;
+  /** Gesammelte Kürbisse (Ernte von Feldern). */
+  pumpkins = 0;
   buildings: PlacedBuilding[] = [];
   slots: SlotState[] = [];
   roads: RoadTile[] = [];
@@ -88,6 +116,7 @@ export class GameState {
   /** Neues Spiel: ein Start-Stall am Ursprung mit Gratis-Huhn in Slot 0. */
   reset(): void {
     this.money = STARTING_MONEY;
+    this.pumpkins = 0;
     this.buildings = [{ defId: "stall", x: 0, z: 0, rotation: 0 }];
     const count = getBuilding("stall")?.slotCount ?? 8;
     this.slots = Array.from({ length: count }, (_, i) =>
@@ -240,10 +269,49 @@ export class GameState {
     const def = getBuilding(defId);
     if (!def || !this.canAfford(def.cost)) return -1;
     this.money -= def.cost;
-    this.buildings.push({ defId, x, z, rotation });
+    const placed: PlacedBuilding = { defId, x, z, rotation };
+    if (def.isField) placed.field = freshFieldGrowth();
+    this.buildings.push(placed);
     for (let i = 0; i < def.slotCount; i++) this.slots.push(makeSlot());
     this.emit();
     return this.buildings.length - 1;
+  }
+
+  /**
+   * Rückt das Wachstum eines Feldes voran. `weatherFactor` (0..1) gewichtet die
+   * Wachstums-Güte und fließt in den späteren Ernte-Ertrag ein. Schaltet bei
+   * Erreichen der Schwellen dirt→growing→ready; im Reif-Zustand passiert nichts mehr.
+   */
+  tickField(b: PlacedBuilding, dtSec: number, weatherFactor: number): void {
+    const f = b.field;
+    if (!f || f.state === "ready" || dtSec <= 0) return;
+    f.progress += dtSec;
+    f.weatherSum += weatherFactor * dtSec;
+    f.weatherTime += dtSec;
+    if (f.state === "dirt" && f.progress >= GROW_TO_GROWING_SEC) {
+      f.progress -= GROW_TO_GROWING_SEC;
+      f.state = "growing";
+    }
+    if (f.state === "growing" && f.progress >= GROW_TO_READY_SEC) {
+      f.state = "ready";
+      f.progress = 0;
+    }
+  }
+
+  /**
+   * Erntet ein reifes Feld: schreibt 4–10 Kürbisse gut (je nach Wetter über den
+   * Wachstumszeitraum) und startet den Zyklus neu bei „Bau". Gibt die Menge zurück (0 falls nicht reif).
+   */
+  harvestField(buildingIndex: number): number {
+    const b = this.buildings[buildingIndex];
+    const f = b?.field;
+    if (!f || f.state !== "ready") return 0;
+    const avg = f.weatherTime > 0 ? f.weatherSum / f.weatherTime : 0.7;
+    const gained = yieldFromWeather(avg);
+    this.pumpkins += gained;
+    b.field = freshFieldGrowth();
+    this.emit();
+    return gained;
   }
 
   /** Dreht ein Gebäude um 90°. */
@@ -307,6 +375,7 @@ export class GameState {
     return {
       version: 3,
       money: this.money,
+      pumpkins: this.pumpkins,
       buildings: this.buildings,
       slots: this.slots,
       roads: this.roads,

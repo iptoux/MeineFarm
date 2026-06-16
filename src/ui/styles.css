@@ -41,6 +41,28 @@ body {
   display: block;
 }
 
+#hud-pumpkins {
+  position: absolute;
+  top: 70px;
+  left: 16px;
+  padding: 8px 18px 8px 10px;
+  background: rgba(20, 30, 20, 0.78);
+  color: #ffba5c;
+  font-size: 24px;
+  font-weight: 700;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#pumpkin-icon {
+  width: 34px;
+  height: 34px;
+  display: block;
+}
+
 #hint {
   position: absolute;
   bottom: 14px;
@@ -248,11 +270,77 @@ body {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 10px;
-  padding: 10px;
+  gap: 8px;
+  padding: 8px;
   background: rgba(20, 30, 20, 0.72);
   border-radius: 14px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Kategorie-Knöpfe in der Leiste */
+.build-cat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 76px;
+  padding: 8px 12px;
+  background: #3a5d8a;
+  color: #fff;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.build-cat:hover {
+  background: #4a72a8;
+}
+
+.build-cat.active {
+  background: #4a72a8;
+  border-color: #cfe0ff;
+}
+
+.cat-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.cat-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Popover mit den baubaren Karten der Kategorie */
+.build-popover {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(20, 30, 20, 0.92);
+  border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  max-width: 80vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.build-popover.hidden {
+  display: none;
+}
+
+/* Kleiner Pfeil nach unten */
+.build-popover::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 8px solid transparent;
+  border-top-color: rgba(20, 30, 20, 0.92);
 }
 
 .build-card {
@@ -302,6 +390,10 @@ body {
   pointer-events: none;
   z-index: 20;
   animation: floatUp 0.9s ease-out forwards;
+}
+
+.float-pumpkins {
+  color: #ff9a3c;
 }
 
 @keyframes floatUp {

@@ -1,7 +1,15 @@
-import { GameState, type SaveData, type SlotState } from "../game/GameState";
+import {
+  GameState,
+  freshFieldGrowth,
+  type FieldGrowth,
+  type SaveData,
+  type SlotState,
+} from "../game/GameState";
 import { getAnimal } from "../game/config/animals";
+import { getBuilding } from "../game/config/buildings";
 import { randomDogName } from "../game/config/dognames";
 import { INITIAL_FIELD, isValidField } from "../game/config/chunks";
+import { NEUTRAL_WEATHER_FACTOR } from "../game/config/fields";
 import { offlineGain } from "../game/economy";
 
 /** Index aller Spielstände (leichte Metadaten fürs Startmenü). */
@@ -21,6 +29,19 @@ export interface SaveMeta {
 
 function saveKey(id: string): string {
   return SAVE_PREFIX + id;
+}
+
+/** Stellt einen gültigen Feld-Wachstumszustand her (Defaults bei fehlenden/kaputten Daten). */
+function sanitizeFieldGrowth(f: FieldGrowth | undefined): FieldGrowth {
+  if (!f || (f.state !== "dirt" && f.state !== "growing" && f.state !== "ready")) {
+    return freshFieldGrowth();
+  }
+  return {
+    state: f.state,
+    progress: typeof f.progress === "number" && f.progress >= 0 ? f.progress : 0,
+    weatherSum: typeof f.weatherSum === "number" && f.weatherSum >= 0 ? f.weatherSum : 0,
+    weatherTime: typeof f.weatherTime === "number" && f.weatherTime >= 0 ? f.weatherTime : 0,
+  };
 }
 
 function newId(): string {
@@ -117,18 +138,24 @@ export class SaveManager {
     }
 
     state.money = data.money ?? 0;
+    state.pumpkins = typeof data.pumpkins === "number" ? data.pumpkins : 0;
     // Feldgrenzen: v3 validieren, sonst (v2 / kaputt) Startfeld. Bestehende
     // Gebäude/Straßen außerhalb bleiben erhalten – nur NEUE Platzierung ist begrenzt.
     state.field = isValidField(data.field) ? { ...data.field } : { ...INITIAL_FIELD };
     state.timeOfDay = typeof data.timeOfDay === "number" ? data.timeOfDay : 0.32;
     state.weather = typeof data.weather === "string" ? data.weather : "clear";
     state.dogName = typeof data.dogName === "string" && data.dogName ? data.dogName : randomDogName();
-    state.buildings = data.buildings.map((b) => ({
-      defId: b.defId,
-      x: b.x,
-      z: b.z,
-      rotation: b.rotation ?? 0,
-    }));
+    state.buildings = data.buildings.map((b) => {
+      const isField = getBuilding(b.defId)?.isField ?? false;
+      return {
+        defId: b.defId,
+        x: b.x,
+        z: b.z,
+        rotation: b.rotation ?? 0,
+        // Feld-Wachstum übernehmen (mit Defaults absichern); Nicht-Felder: kein Zustand.
+        ...(isField ? { field: sanitizeFieldGrowth(b.field) } : {}),
+      };
+    });
     state.slots = data.slots.map(
       (s): SlotState => ({
         unlocked: s?.unlocked ?? false,
@@ -146,6 +173,10 @@ export class SaveManager {
         if (!slot.animalId) continue;
         const def = getAnimal(slot.animalId);
         if (def) slot.pending += offlineGain(def, elapsedSec);
+      }
+      // Felder wachsen offline mit neutralem Wetterfaktor weiter.
+      for (const b of state.buildings) {
+        if (b.field) state.tickField(b, elapsedSec, NEUTRAL_WEATHER_FACTOR);
       }
     }
 

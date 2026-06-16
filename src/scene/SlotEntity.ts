@@ -5,7 +5,7 @@ import { fillRatio, isFull } from "../game/economy";
 import type { AnimalModels } from "./AnimalModels";
 
 /** Art eines anklickbaren Meshes — vom Picker ausgewertet. */
-export type PickKind = "marker" | "bubble" | "animal" | "building" | "dog";
+export type PickKind = "marker" | "bubble" | "animal" | "building" | "dog" | "field";
 
 export interface PickData {
   kind: PickKind;
