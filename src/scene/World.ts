@@ -19,9 +19,9 @@ const GRASS_BUILD_MARGIN = 0.1;
 /** Höhe, auf der Teiche liegen (knapp über dem Boden, gegen Z-Fighting). */
 const POND_Y = 0.02;
 /** Radius der Wasserfläche im Steinring (etwas kleiner als der Footprint). */
-const WATER_RADIUS = POND_RADIUS - 0.6;
+const WATER_RADIUS = POND_RADIUS - 2.0;
 /** Höhe der Wasseroberfläche im Becken. */
-const WATER_Y = 0.45;
+const WATER_Y = 0.15;
 
 /**
  * Verwaltet die sichtbare Welt: Gebäude-Meshes + ihre Slot-Entities und die
