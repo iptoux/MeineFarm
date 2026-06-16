@@ -66,8 +66,8 @@ const PARAMS: Record<WeatherKind, WeatherParams> = {
   fog: params({ density: 0.55, cloudColor: 0xd8dde2, cloudOpacity: 0.85, dimFactor: 0.8, overcast: 0.85, exposure: 0.7, fogNear: 20, fogFar: 70, fogTint: 0xc7ccd1, fogTintAmount: 0.6, rainIntensity: 0, windMul: 0.4, lightning: false }),
 };
 
-/** Auswahlgewichte für das nächste Wetter: Sonne häufig, Gewitter selten. */
-const NEXT_WEIGHTS: Record<WeatherKind, number> = { clear: 5, fog: 2, rain: 2, storm: 1 };
+/** Auswahlgewichte für das nächste Wetter: Sonne häufig, Nebel selten, Gewitter wieder spürbar. */
+const NEXT_WEIGHTS: Record<WeatherKind, number> = { clear: 5, fog: 1, rain: 3, storm: 2 };
 /** Anteil der Tage mit einem Wechsel. */
 const CHANGE_CHANCE = 0.5;
 /** Breite des Übergangsfensters als Bruchteil eines Tages (~18 s bei DAY_LENGTH_SEC=360). */

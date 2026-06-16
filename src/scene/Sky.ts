@@ -16,8 +16,9 @@ const DAY_LENGTH_SEC = 360;
 const DAY_FRACTION = 2 / 3;
 /** Hoechster Sonnenstand mittags (Grad ueber dem Horizont). */
 const MAX_ELEVATION = 60;
-const SKY_RADIUS = 400;
+const SKY_RADIUS = 1400;
 const SKYBOX_URL = "/skybox/farm-lowpoly/panorama.png";
+const HORIZON_RADIUS = 230;
 
 const FOG_DAY = new THREE.Color(0x9fc9e8);
 const FOG_NIGHT = new THREE.Color(0x0b1626);
@@ -43,6 +44,8 @@ export class SkyManager {
   readonly ready: Promise<void>;
 
   private readonly skyMat: THREE.MeshBasicMaterial;
+  private readonly sky: THREE.Mesh;
+  private readonly horizon: THREE.Group;
   private readonly stars: THREE.Points;
   private readonly starMat: THREE.PointsMaterial;
   private readonly sunVec = new THREE.Vector3();
@@ -62,10 +65,13 @@ export class SkyManager {
       fog: false,
       side: THREE.BackSide,
     });
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(SKY_RADIUS, 64, 32), this.skyMat);
-    sky.frustumCulled = false;
-    sky.renderOrder = -1000;
-    scene.add(sky);
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(SKY_RADIUS, 64, 32), this.skyMat);
+    this.sky.frustumCulled = false;
+    this.sky.renderOrder = -1000;
+    scene.add(this.sky);
+
+    this.horizon = makeDistantHorizon(HORIZON_RADIUS);
+    scene.add(this.horizon);
 
     this.starMat = new THREE.PointsMaterial({
       color: 0xfdfdff,
@@ -80,6 +86,12 @@ export class SkyManager {
     this.stars = new THREE.Points(makeStarField(SKY_RADIUS * 0.42), this.starMat);
     this.stars.frustumCulled = false;
     scene.add(this.stars);
+
+    this.sky.onBeforeRender = (_renderer, _scene, camera) => {
+      this.sky.position.copy(camera.position);
+      this.stars.position.copy(camera.position);
+      this.horizon.position.set(camera.position.x, 0, camera.position.z);
+    };
 
     this.ready = this.loadSkybox();
     this.apply();
@@ -159,6 +171,67 @@ export class SkyManager {
     this.skyTint.lerp(SKY_TINT_OVERCAST, this.overcast * 0.45);
     this.skyMat.color.copy(this.skyTint);
   }
+}
+
+function makeDistantHorizon(radius: number): THREE.Group {
+  const group = new THREE.Group();
+  group.renderOrder = -900;
+
+  const mountainBack = new THREE.MeshBasicMaterial({ color: 0xa8a1bd, fog: false, side: THREE.DoubleSide });
+  const mountainFront = new THREE.MeshBasicMaterial({ color: 0xbfae8b, fog: false, side: THREE.DoubleSide });
+  const hillMat = new THREE.MeshBasicMaterial({ color: 0x82a35d, fog: false, side: THREE.DoubleSide });
+
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2;
+    const width = THREE.MathUtils.degToRad(10 + ((i * 17) % 9));
+    const height = 15 + ((i * 11) % 10);
+    const base = 2.0 + ((i * 5) % 4) * 0.35;
+    group.add(makeHorizonTriangle(radius, a, width, base, height, mountainBack, -8));
+  }
+
+  for (let i = 0; i < 22; i++) {
+    const a = ((i + 0.35) / 22) * Math.PI * 2;
+    const width = THREE.MathUtils.degToRad(14 + ((i * 13) % 10));
+    const height = 8 + ((i * 7) % 6);
+    group.add(makeHorizonTriangle(radius * 0.93, a, width, 1.0, height, mountainFront, -6));
+  }
+
+  for (let i = 0; i < 18; i++) {
+    const a = ((i + 0.15) / 18) * Math.PI * 2;
+    const width = THREE.MathUtils.degToRad(22 + ((i * 19) % 14));
+    const height = 4.6 + ((i * 3) % 4) * 0.7;
+    group.add(makeHorizonTriangle(radius * 0.84, a, width, 0.3, height, hillMat, -4));
+  }
+
+  return group;
+}
+
+function makeHorizonTriangle(
+  radius: number,
+  angle: number,
+  width: number,
+  baseY: number,
+  height: number,
+  material: THREE.Material,
+  renderOrder: number,
+): THREE.Mesh {
+  const geo = new THREE.BufferGeometry();
+  const left = pointOnCircle(radius, angle - width / 2, baseY);
+  const right = pointOnCircle(radius, angle + width / 2, baseY);
+  const peak = pointOnCircle(radius, angle, baseY + height);
+  geo.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute([left.x, left.y, left.z, right.x, right.y, right.z, peak.x, peak.y, peak.z], 3),
+  );
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = renderOrder;
+  return mesh;
+}
+
+function pointOnCircle(radius: number, angle: number, y: number): THREE.Vector3 {
+  return new THREE.Vector3(Math.sin(angle) * radius, y, Math.cos(angle) * radius);
 }
 
 /**
