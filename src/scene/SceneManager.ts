@@ -58,6 +58,9 @@ export class SceneManager {
     // senkrecht von oben über die Stern-Kuppel hinaus schauen.
     this.controls.minPolarAngle = 0.25;
     this.controls.maxPolarAngle = Math.PI / 2 - 0.18;
+    // Pan (rechte Maustaste) entlang des Bodens statt der Bildschirmebene → der
+    // Blickpunkt driftet nicht in die Höhe (kein Blick unter die Map).
+    this.controls.screenSpacePanning = false;
     this.controls.target.set(0, 1.2, 0);
 
     this.setupLights();
@@ -107,18 +110,24 @@ export class SceneManager {
 
     this.camera.position.add(move);
     this.controls.target.add(move);
+  }
 
-    // Zielpunkt im Feld halten; Kamera um dieselbe Korrektur mitziehen.
+  /**
+   * Hält den Kamera-Zielpunkt im Feld (mit Rand) – gilt für WASD- UND OrbitControls-
+   * Pan (rechte Maustaste). Die Kamera wird um dieselbe Korrektur mitgezogen, damit
+   * Blickrichtung/Zoom erhalten bleiben.
+   */
+  private clampPan(): void {
     const b = this.panBounds;
-    if (b) {
-      const t = this.controls.target;
-      const cx = THREE.MathUtils.clamp(t.x, b.minX, b.maxX);
-      const cz = THREE.MathUtils.clamp(t.z, b.minZ, b.maxZ);
-      this.camera.position.x += cx - t.x;
-      this.camera.position.z += cz - t.z;
-      t.x = cx;
-      t.z = cz;
-    }
+    if (!b) return;
+    const t = this.controls.target;
+    const cx = THREE.MathUtils.clamp(t.x, b.minX, b.maxX);
+    const cz = THREE.MathUtils.clamp(t.z, b.minZ, b.maxZ);
+    if (cx === t.x && cz === t.z) return;
+    this.camera.position.x += cx - t.x;
+    this.camera.position.z += cz - t.z;
+    t.x = cx;
+    t.z = cz;
   }
 
   /**
@@ -188,6 +197,7 @@ export class SceneManager {
     this.updatePan(dt);
     this.updateFade();
     this.controls.update();
+    this.clampPan(); // nach update(): auch OrbitControls-Pan (rechte Maustaste) begrenzen
     this.renderer.render(this.scene, this.camera);
   }
 }
