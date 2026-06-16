@@ -28,6 +28,17 @@ export class SceneManager {
   private lastTime = performance.now();
   /** Begrenzung für den Kamera-Zielpunkt (Spielfeld + Rand); null = unbegrenzt. */
   private panBounds: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
+  /** Laufende Kamerafahrt (Fokus auf den Hund / zurück); null = keine. */
+  private camTween: {
+    fromTarget: THREE.Vector3;
+    toTarget: THREE.Vector3;
+    fromPos: THREE.Vector3;
+    toPos: THREE.Vector3;
+    t: number;
+    dur: number;
+  } | null = null;
+  /** Vor dem Fokus gesicherte Ansicht (für die Rückfahrt). */
+  private savedView: { target: THREE.Vector3; pos: THREE.Vector3 } | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene.background = new THREE.Color(0x87ceeb); // Himmelblau (Fallback, vom Sky überdeckt)
@@ -81,6 +92,60 @@ export class SceneManager {
     this.panBounds = { minX: f.minX - pad, maxX: f.maxX + pad, minZ: f.minZ - pad, maxZ: f.maxZ + pad };
   }
 
+  /**
+   * Fährt die Kamera nah an einen Punkt heran (Hund „vor einem"): behält die
+   * aktuelle horizontale Blickrichtung, geht aber dicht und leicht erhöht heran.
+   * Die vorherige Ansicht wird gesichert (für `clearFocus`).
+   */
+  focusOn(point: THREE.Vector3, distance = 6): void {
+    if (!this.savedView) {
+      this.savedView = { target: this.controls.target.clone(), pos: this.camera.position.clone() };
+    }
+    const horiz = new THREE.Vector3(
+      this.camera.position.x - this.controls.target.x,
+      0,
+      this.camera.position.z - this.controls.target.z,
+    );
+    if (horiz.lengthSq() < 1e-6) horiz.set(0, 0, 1);
+    horiz.normalize();
+    const toPos = point.clone().addScaledVector(horiz, distance * 0.85);
+    toPos.y = point.y + distance * 0.55;
+    this.startTween(point.clone(), toPos, 0.6);
+  }
+
+  /** Fährt die Kamera zur vor dem Fokus gesicherten Ansicht zurück. */
+  clearFocus(): void {
+    if (!this.savedView) return;
+    this.startTween(this.savedView.target.clone(), this.savedView.pos.clone(), 0.6);
+    this.savedView = null;
+  }
+
+  private startTween(toTarget: THREE.Vector3, toPos: THREE.Vector3, dur: number): void {
+    this.camTween = {
+      fromTarget: this.controls.target.clone(),
+      toTarget,
+      fromPos: this.camera.position.clone(),
+      toPos,
+      t: 0,
+      dur,
+    };
+    this.controls.enabled = false; // während der Fahrt keine Nutzereingabe
+  }
+
+  /** Wertet eine laufende Kamerafahrt aus (lerpt Ziel + Position, ease-in-out). */
+  private updateCamTween(dt: number): void {
+    const tw = this.camTween;
+    if (!tw) return;
+    tw.t = Math.min(1, tw.t + dt / tw.dur);
+    const e = tw.t * tw.t * (3 - 2 * tw.t); // smoothstep
+    this.controls.target.lerpVectors(tw.fromTarget, tw.toTarget, e);
+    this.camera.position.lerpVectors(tw.fromPos, tw.toPos, e);
+    if (tw.t >= 1) {
+      this.camTween = null;
+      this.controls.enabled = true;
+    }
+  }
+
   private onKeyDown = (e: KeyboardEvent): void => {
     const k = e.key.toLowerCase();
     if (k === "w" || k === "a" || k === "s" || k === "d") this.keys.add(k);
@@ -92,7 +157,7 @@ export class SceneManager {
 
   /** WASD verschiebt Kamera + Zielpunkt entlang des Bodens (Panning). */
   private updatePan(dt: number): void {
-    if (this.keys.size === 0) return;
+    if (this.camTween || this.keys.size === 0) return;
     const forward = new THREE.Vector3();
     this.camera.getWorldDirection(forward);
     forward.y = 0;
@@ -194,10 +259,11 @@ export class SceneManager {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
 
+    this.updateCamTween(dt);
     this.updatePan(dt);
     this.updateFade();
     this.controls.update();
-    this.clampPan(); // nach update(): auch OrbitControls-Pan (rechte Maustaste) begrenzen
+    if (!this.camTween) this.clampPan(); // nach update(): OrbitControls-Pan begrenzen (nicht während der Kamerafahrt)
     this.renderer.render(this.scene, this.camera);
   }
 }

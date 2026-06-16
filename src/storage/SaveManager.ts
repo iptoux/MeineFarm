@@ -1,5 +1,6 @@
 import { GameState, type SaveData, type SlotState } from "../game/GameState";
 import { getAnimal } from "../game/config/animals";
+import { randomDogName } from "../game/config/dognames";
 import { INITIAL_FIELD, isValidField } from "../game/config/chunks";
 import { offlineGain } from "../game/economy";
 
@@ -121,6 +122,7 @@ export class SaveManager {
     state.field = isValidField(data.field) ? { ...data.field } : { ...INITIAL_FIELD };
     state.timeOfDay = typeof data.timeOfDay === "number" ? data.timeOfDay : 0.32;
     state.weather = typeof data.weather === "string" ? data.weather : "clear";
+    state.dogName = typeof data.dogName === "string" && data.dogName ? data.dogName : randomDogName();
     state.buildings = data.buildings.map((b) => ({
       defId: b.defId,
       x: b.x,

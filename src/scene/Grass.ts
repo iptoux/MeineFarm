@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { INITIAL_FIELD, type FieldBounds } from "../game/config/chunks";
+import { applyWind } from "./wind";
 
 /**
  * Animiertes Wind-Gras auf dem Boden, aufgebaut aus instanzierten GLB-Büscheln:
@@ -49,6 +50,8 @@ export class Grass {
   readonly object = new THREE.Group();
   /** Gemeinsame Zeit-Uniform für alle Gras-Materialien. */
   private readonly uTime = { value: 0 };
+  /** Gemeinsame Wind-Stärke (vom Wetter gesetzt: ruhig ~0.4, Sturm ~2.4). */
+  private readonly uWind = { value: 1 };
   private cullables: Cullable[] = [];
   /** Geladene Clump-Vorlagen (Geometrie/Material), für Rebuilds wiederverwendet. */
   private readonly sources: ClumpSource[];
@@ -85,6 +88,11 @@ export class Grass {
   /** Aktualisiert die Windphase (im Render-Loop mit Gesamtzeit in Sekunden). */
   update(tSec: number): void {
     this.uTime.value = tSec;
+  }
+
+  /** Setzt die Wind-Stärke (Wetter-Multiplikator: ruhig ~0.4, Sturm ~2.4). */
+  setWind(strength: number): void {
+    this.uWind.value = strength;
   }
 
   /**
@@ -132,7 +140,7 @@ export class Grass {
    */
   private buildClumps(src: ClumpSource, field: FieldBounds, count: number): THREE.InstancedMesh {
     const mat = src.material.clone();
-    applyWind(mat, this.uTime, CLUMP_HEIGHT, src.amplitude);
+    applyWind(mat, this.uTime, this.uWind, CLUMP_HEIGHT, src.amplitude);
 
     const mesh = new THREE.InstancedMesh(src.geometry, mat, count);
     mesh.castShadow = false;
@@ -228,48 +236,4 @@ function normalizeToGround(geo: THREE.BufferGeometry, targetHeight: number): voi
   geo.translate(-center.x, -box.min.y, -center.z);
   geo.scale(scale, scale, scale);
   geo.computeVertexNormals();
-}
-
-/**
- * Patcht ein Material so, dass Vertices oberhalb der Wurzel im Wind schwingen.
- * Die Auslenkung ist höhenmaskiert (smoothstep) und pro Instanz phasenverschoben
- * (aus der Instanz-Weltposition), damit nicht alle Büschel synchron wippen.
- */
-function applyWind(
-  material: THREE.Material,
-  uTime: { value: number },
-  height: number,
-  amplitude: number,
-): void {
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = uTime;
-    shader.uniforms.uHeight = { value: height };
-    shader.uniforms.uAmp = { value: amplitude };
-
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-         uniform float uTime;
-         uniform float uHeight;
-         uniform float uAmp;`,
-      )
-      .replace(
-        "#include <begin_vertex>",
-        `#include <begin_vertex>
-         {
-           #ifdef USE_INSTANCING
-             vec3 instPos = instanceMatrix[3].xyz;
-           #else
-             vec3 instPos = vec3(0.0);
-           #endif
-           float phase = instPos.x * 0.35 + instPos.z * 0.35;
-           float mask = smoothstep(0.0, uHeight, position.y);
-           float w = sin(uTime * 1.6 + phase) * 0.6 + sin(uTime * 0.7 + phase * 1.7) * 0.4;
-           transformed.x += w * mask * uAmp;
-           transformed.z += w * mask * uAmp * 0.4;
-         }`,
-      );
-  };
-  material.needsUpdate = true;
 }

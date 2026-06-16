@@ -15,6 +15,8 @@ export interface PickerHandlers {
   onAnimal: (slotIndex: number, screen: { x: number; y: number }) => void;
   /** Rechtsklick auf die Gebäude-Struktur (Gebäude-Menü). */
   onBuilding: (buildingIndex: number, screen: { x: number; y: number }) => void;
+  /** Linksklick auf den streunenden Hund (Hunde-Menü). */
+  onDog: (screen: { x: number; y: number }) => void;
 }
 
 /**
@@ -71,13 +73,15 @@ export class Picker {
       return;
     }
 
-    // Linksklick → Münze / Marker / Tier (Gebäude ignorieren)
+    // Linksklick → Münze / Marker / Tier / Hund (Gebäude ignorieren)
     if (data.kind === "bubble" && data.slotIndex !== undefined) {
       this.handlers.onBubble(data.slotIndex, screen);
     } else if (data.kind === "marker" && data.slotIndex !== undefined) {
       this.handlers.onMarker(data.slotIndex, screen);
     } else if (data.kind === "animal" && data.slotIndex !== undefined) {
       this.handlers.onAnimal(data.slotIndex, screen);
+    } else if (data.kind === "dog") {
+      this.handlers.onDog(screen);
     }
   };
 }

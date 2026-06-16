@@ -5,9 +5,11 @@ import { ANIMALS } from "../game/config/animals";
 import { BUILDINGS } from "../game/config/buildings";
 
 const COIN_SIZE = 0.7;
+const HEART_SIZE = 0.4;
 
 const COIN_URL = "/models/ui/Coin.glb";
 const COIN_PILE_URL = "/models/ui/Coin Piles.glb";
+const HEART_URL = "/models/ui/Heart.glb";
 
 /** Dekorative, nicht kaufbare Modelle (streunender Hund, Frosch). */
 const DECOR: { id: string; url: string; size: number }[] = [
@@ -26,6 +28,7 @@ export class AnimalModels {
   private buildings = new Map<string, THREE.Object3D>();
   private coin: THREE.Object3D | null = null;
   private coinPile: THREE.Object3D | null = null;
+  private heart: THREE.Object3D | null = null;
 
   async load(): Promise<void> {
     const loader = new GLTFLoader();
@@ -70,6 +73,14 @@ export class AnimalModels {
           this.coinPile = this.normalize(gltf.scene, 1, false);
         } catch {
           /* kein Icon */
+        }
+      })(),
+      (async () => {
+        try {
+          const gltf = await loader.loadAsync(HEART_URL);
+          this.heart = this.normalize(gltf.scene, HEART_SIZE, false);
+        } catch {
+          /* ohne Modell werden keine Herzen erzeugt */
         }
       })(),
     ]);
@@ -171,5 +182,15 @@ export class AnimalModels {
   /** Vorlage des Münzhaufens für das HUD-Icon (oder null). */
   getCoinPile(): THREE.Object3D | null {
     return this.coinPile ? this.coinPile.clone(true) : null;
+  }
+
+  /** Klon-Instanz des Herzens (für den Streichel-Effekt) oder null. */
+  getHeart(): THREE.Object3D | null {
+    if (!this.heart) return null;
+    const c = this.heart.clone(true);
+    c.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.material = (o.material as THREE.Material).clone();
+    });
+    return c;
   }
 }

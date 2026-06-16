@@ -25,6 +25,7 @@ export class CritterManager {
   private dog: Dog | null = null;
   private frogs: Frog[] = [];
   private frogTimer = randFloat(8, 20);
+  private hearts: HeartBurst;
 
   constructor(
     private scene: THREE.Scene,
@@ -33,11 +34,44 @@ export class CritterManager {
   ) {
     const model = models.get("shiba");
     if (model) this.dog = new Dog(scene, state, model, models.getClips("shiba"));
+    this.hearts = new HeartBurst(scene, models.getHeart());
   }
 
   update(dt: number): void {
     this.dog?.update(dt);
+    this.hearts.update(dt);
     this.updateFrogs(dt);
+  }
+
+  /** Anklickbare Meshes des Hundes (für den Picker). */
+  dogPickables(): THREE.Object3D[] {
+    return this.dog ? this.dog.pickMeshes() : [];
+  }
+
+  /** Friert den Hund ein (Auswahl) und liefert seine Welt-Kopfposition (für die Kamera). */
+  selectDog(): THREE.Vector3 | null {
+    if (!this.dog) return null;
+    this.dog.setSelected(true);
+    return this.dog.headWorldPos();
+  }
+
+  /** Hebt die Auswahl auf — der Hund läuft wieder los. */
+  deselectDog(): void {
+    this.dog?.setSelected(false);
+  }
+
+  feedDog(): void {
+    this.dog?.feed();
+  }
+
+  petDog(): void {
+    if (!this.dog) return;
+    this.dog.pet();
+    this.hearts.spawn(this.dog.headWorldPos());
+  }
+
+  playWithDog(): void {
+    this.dog?.play();
   }
 
   private updateFrogs(dt: number): void {
@@ -66,8 +100,58 @@ export class CritterManager {
   dispose(): void {
     if (this.dog) this.scene.remove(this.dog.object);
     for (const f of this.frogs) this.scene.remove(f.object);
+    this.hearts.dispose();
     this.frogs = [];
     this.dog = null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Herzen (Streichel-Effekt)
+// ---------------------------------------------------------------------------
+
+const HEART_LIFETIME = 1.1; // Sekunden
+
+/** Kleine 3D-Herzen, die beim Streicheln über dem Hund aufsteigen und verblassen. */
+class HeartBurst {
+  private hearts: { obj: THREE.Object3D; vel: THREE.Vector3; life: number }[] = [];
+
+  constructor(
+    private scene: THREE.Scene,
+    private template: THREE.Object3D | null,
+  ) {}
+
+  spawn(pos: THREE.Vector3, count = 5): void {
+    if (!this.template) return;
+    for (let i = 0; i < count; i++) {
+      const obj = this.template.clone(true);
+      obj.position.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 0.2, pos.z + (Math.random() - 0.5) * 0.4);
+      const vel = new THREE.Vector3((Math.random() - 0.5) * 0.6, 1.2 + Math.random() * 0.8, (Math.random() - 0.5) * 0.6);
+      this.scene.add(obj);
+      this.hearts.push({ obj, vel, life: HEART_LIFETIME });
+    }
+  }
+
+  update(dt: number): void {
+    for (let i = this.hearts.length - 1; i >= 0; i--) {
+      const h = this.hearts[i];
+      h.life -= dt;
+      if (h.life <= 0) {
+        this.scene.remove(h.obj);
+        this.hearts.splice(i, 1);
+        continue;
+      }
+      h.obj.position.addScaledVector(h.vel, dt);
+      h.obj.rotation.y += dt * 2;
+      // Sanft einploppen und wieder schrumpfen (sin-Hüllkurve über die Lebenszeit).
+      const t = h.life / HEART_LIFETIME;
+      h.obj.scale.setScalar(Math.max(0.01, Math.sin(t * Math.PI)));
+    }
+  }
+
+  dispose(): void {
+    for (const h of this.hearts) this.scene.remove(h.obj);
+    this.hearts = [];
   }
 }
 
@@ -75,7 +159,10 @@ export class CritterManager {
 // Hund
 // ---------------------------------------------------------------------------
 
-type DogState = "walk" | "pause";
+type DogState = "walk" | "pause" | "action";
+
+/** Höhe der Hunde-Schnauze über dem Boden (Modell auf Größe 2.0 normalisiert). */
+const DOG_HEAD_Y = 1.3;
 
 class Dog {
   readonly object: THREE.Object3D;
@@ -83,14 +170,21 @@ class Dog {
   private walkAction: THREE.AnimationAction | null;
   private gallopAction: THREE.AnimationAction | null;
   private pauseActions: THREE.AnimationAction[] = [];
+  private feedAction: THREE.AnimationAction | null;
+  private petAction: THREE.AnimationAction | null;
+  private playAction: THREE.AnimationAction | null;
   private current: THREE.AnimationAction | null = null;
 
   private state: DogState = "pause";
   private path: THREE.Vector2[] = [];
   private speed = 2.2;
   private pauseTimer = randFloat(1, 3);
+  private actionTimer = 0;
   private heading = 0;
   private yCurrent = 0;
+  /** Angeklickt/ausgewählt: Hund bleibt stehen, bis wieder deselektiert wird. */
+  private selected = false;
+  private pickMeshCache: THREE.Object3D[] | null = null;
 
   constructor(
     scene: THREE.Scene,
@@ -110,11 +204,26 @@ class Dog {
       const a = makeAction(this.mixer, clips, needles);
       if (a) this.pauseActions.push(a);
     }
+    // Aktions-Animationen. Achtung: clipAction liefert pro Clip dieselbe Instanz
+    // wie die Pause-Idles → der Loop-Modus wird daher pro switchTo() gesetzt,
+    // nicht hier (sonst würden geteilte Idle-Clips nicht mehr loopen).
+    this.feedAction = makeAction(this.mixer, clips, ["eating"]);
+    this.petAction = makeAction(this.mixer, clips, ["idle_2_headlow", "idle_2"]);
+    this.playAction = makeAction(this.mixer, clips, ["jump_toidle", "gallop_jump"]);
     this.switchTo(this.pauseActions[this.pauseActions.length - 1] ?? this.walkAction);
   }
 
   update(dt: number): void {
     this.mixer.update(dt);
+
+    if (this.state === "action") {
+      this.actionTimer -= dt;
+      if (this.actionTimer <= 0) this.endAction();
+      return;
+    }
+
+    // Ausgewählt → eingefroren: nur die Idle-Animation läuft, kein Roaming.
+    if (this.selected) return;
 
     if (this.state === "pause") {
       this.pauseTimer -= dt;
@@ -123,6 +232,78 @@ class Dog {
     }
 
     this.followPath(dt);
+  }
+
+  // --- Auswahl / Aktionen --------------------------------------------------
+
+  /** Anklickbare Meshes (gecacht; setzt einmalig das Picker-`userData`). */
+  pickMeshes(): THREE.Object3D[] {
+    if (!this.pickMeshCache) {
+      const meshes: THREE.Object3D[] = [];
+      this.object.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.userData = { kind: "dog" };
+          meshes.push(o);
+        }
+      });
+      this.pickMeshCache = meshes;
+    }
+    return this.pickMeshCache;
+  }
+
+  /** Welt-Position der Schnauze (für Kamerafokus und Herzen). */
+  headWorldPos(): THREE.Vector3 {
+    return new THREE.Vector3(this.object.position.x, this.object.position.y + DOG_HEAD_Y, this.object.position.z);
+  }
+
+  setSelected(selected: boolean): void {
+    this.selected = selected;
+    if (selected) {
+      this.path = [];
+      if (this.state !== "action") {
+        this.state = "pause";
+        this.switchTo(this.idleAction());
+      }
+    } else if (this.state !== "action") {
+      this.beginPause();
+    }
+  }
+
+  feed(): void {
+    this.triggerAction(this.feedAction);
+  }
+
+  pet(): void {
+    this.triggerAction(this.petAction);
+  }
+
+  play(): void {
+    this.triggerAction(this.playAction);
+  }
+
+  /** Startet eine einmalige Aktions-Animation (unterbricht Laufen/Idle). */
+  private triggerAction(action: THREE.AnimationAction | null): void {
+    if (!action) return;
+    this.path = [];
+    this.state = "action";
+    this.switchTo(action, true);
+    const dur = action.getClip().duration;
+    this.actionTimer = Math.min(dur > 0 ? dur : 2.5, 2.5);
+  }
+
+  /** Nach einer Aktion: bei Auswahl ruhig stehen bleiben, sonst weiterstreunen. */
+  private endAction(): void {
+    if (this.selected) {
+      this.state = "pause";
+      this.switchTo(this.idleAction());
+    } else {
+      this.beginPause();
+    }
+  }
+
+  /** Ruhige Idle-Animation (Fallback: Laufen). */
+  private idleAction(): THREE.AnimationAction | null {
+    return this.pauseActions[this.pauseActions.length - 1] ?? this.walkAction;
   }
 
   /** Sucht ein neues Ziel und plant den Weg dorthin. */
@@ -179,11 +360,21 @@ class Dog {
     }
   }
 
-  private switchTo(next: THREE.AnimationAction | null): void {
-    if (!next || next === this.current) return;
+  private switchTo(next: THREE.AnimationAction | null, force = false): void {
+    if (!next) return;
+    if (next === this.current && !force) return;
+    // `force` = einmalige Aktion (am Ende stehen bleiben); sonst Endlos-Loop.
+    // Wird pro Aufruf gesetzt, weil Aktions-/Idle-Clips dieselbe Instanz teilen.
+    if (force) {
+      next.setLoop(THREE.LoopOnce, 1);
+      next.clampWhenFinished = true;
+    } else {
+      next.setLoop(THREE.LoopRepeat, Infinity);
+      next.clampWhenFinished = false;
+    }
     next.reset();
     next.play();
-    if (this.current) this.current.crossFadeTo(next, 0.3, false);
+    if (this.current && this.current !== next) this.current.crossFadeTo(next, 0.3, false);
     this.current = next;
   }
 

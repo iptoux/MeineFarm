@@ -3,6 +3,7 @@ import "./ui/styles.css";
 import { SceneManager } from "./scene/SceneManager";
 import { Ground } from "./scene/Ground";
 import { createGrass } from "./scene/Grass";
+import { createTrees } from "./scene/Trees";
 import { INITIAL_FIELD } from "./game/config/chunks";
 import { SkyManager } from "./scene/Sky";
 import { CloudManager } from "./scene/Clouds";
@@ -55,6 +56,10 @@ async function init(): Promise<void> {
   const grass = await createGrass();
   sceneManager.scene.add(grass.object);
 
+  // Zufällig verteilte Bäume (wiegen im Wind, unter Gebäuden ausgeblendet)
+  const trees = await createTrees();
+  sceneManager.scene.add(trees.object);
+
   // Tiermodelle (Poly Pizza) laden und normalisieren
   const models = new AnimalModels();
   await models.load();
@@ -90,7 +95,7 @@ async function init(): Promise<void> {
     muteBtn.textContent = audio.toggleMute() ? "🔇" : "🔊";
   });
 
-  const rig: Rig = { sceneManager, models, grass, ground, clouds, sky, weather, coinBurst, audio };
+  const rig: Rig = { sceneManager, models, grass, trees, ground, clouds, sky, weather, coinBurst, audio };
 
   // --- Spiel-Session + Startmenü ---
   let session: GameSession | null = null;
@@ -122,6 +127,8 @@ async function init(): Promise<void> {
     session?.update(dt, tSec);
     coinBurst.update(dt);
     grass.update(tSec);
+    grass.setWind(weather.windStrength);
+    trees.update(tSec, weather.windStrength);
     sky.update(dt);
     weather.update(dt, sky.timeOfDay, sky.daylight);
     clouds.update(dt, sky.daylight, sky.sunDir);
@@ -138,6 +145,7 @@ async function init(): Promise<void> {
       sky,
       weather,
       grass,
+      trees,
       ground,
       clouds,
       get session() {

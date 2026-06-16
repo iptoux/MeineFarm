@@ -1,6 +1,7 @@
 import type { SceneManager } from "../scene/SceneManager";
 import type { AnimalModels } from "../scene/AnimalModels";
 import type { Grass } from "../scene/Grass";
+import type { Trees } from "../scene/Trees";
 import type { Ground } from "../scene/Ground";
 import type { CloudManager } from "../scene/Clouds";
 import type { SkyManager } from "../scene/Sky";
@@ -23,6 +24,7 @@ import { BuildMenu } from "../ui/BuildMenu";
 import { BuildingMenu } from "../ui/BuildingMenu";
 import { AnimalMenu } from "../ui/AnimalMenu";
 import { FieldMenu } from "../ui/FieldMenu";
+import { DogMenu } from "../ui/DogMenu";
 import { floatMoney } from "../ui/Effects";
 
 import { AudioManager } from "../audio/AudioManager";
@@ -34,6 +36,7 @@ export interface Rig {
   sceneManager: SceneManager;
   models: AnimalModels;
   grass: Grass;
+  trees: Trees;
   ground: Ground;
   clouds: CloudManager;
   sky: SkyManager;
@@ -55,6 +58,7 @@ export class GameSession {
   private slotMenu: SlotMenu;
   private animalMenu: AnimalMenu;
   private buildingMenu: BuildingMenu;
+  private dogMenu: DogMenu;
   private placement: PlacementController;
   private roadController: RoadController;
   private fieldExpansion: FieldExpansion;
@@ -68,7 +72,7 @@ export class GameSession {
     private rig: Rig,
     private saveId: string,
   ) {
-    const { sceneManager, models, grass, coinBurst, audio } = rig;
+    const { sceneManager, models, grass, trees, coinBurst, audio } = rig;
     const signal = this.abort.signal;
 
     SaveManager.loadInto(this.state, saveId);
@@ -79,7 +83,7 @@ export class GameSession {
     rig.weather.setWeather(WEATHER_KINDS.includes(w) ? w : "clear", true);
 
     // Welt aus dem Zustand aufbauen (Gebäude + Slot-Entities + Straßen)
-    this.world = new World(sceneManager.scene, this.state, models, grass);
+    this.world = new World(sceneManager.scene, this.state, models, grass, trees);
     sceneManager.setFadeOnZoom(this.world.roofMeshes);
 
     // HUD
@@ -171,6 +175,21 @@ export class GameSession {
       signal,
     );
 
+    // Hunde-Kontextmenü (Füttern / Streicheln / Spielen / Name ändern)
+    this.dogMenu = new DogMenu(
+      this.state,
+      {
+        onFeed: () => this.critters.feedDog(),
+        onPet: () => this.critters.petDog(),
+        onPlay: () => this.critters.playWithDog(),
+        onClose: () => {
+          this.critters.deselectDog();
+          sceneManager.clearFocus();
+        },
+      },
+      signal,
+    );
+
     // Bau-Menü unten: Gebäude → Platzieren, Straße → Straßen-Modus
     new BuildMenu(this.state, (id) => {
       if (getRoad(id)) {
@@ -185,7 +204,7 @@ export class GameSession {
     new Picker(
       sceneManager.camera,
       sceneManager.renderer.domElement,
-      () => this.world.pickables(),
+      () => [...this.world.pickables(), ...this.critters.dogPickables()],
       {
         onMarker: (index, screen) => this.slotMenu.openForSlot(index, screen),
         onBubble: (index, screen) => {
@@ -203,6 +222,11 @@ export class GameSession {
           this.animalMenu.openForSlot(index, screen);
         },
         onBuilding: (index, screen) => this.buildingMenu.openForBuilding(index, screen),
+        onDog: (screen) => {
+          const p = this.critters.selectDog();
+          if (p) sceneManager.focusOn(p);
+          this.dogMenu.openForDog(screen);
+        },
       },
       () => this.placement.active || this.roadController.active,
       signal,
@@ -222,7 +246,8 @@ export class GameSession {
     const f = this.state.field;
     this.rig.ground.resize(f);
     this.rig.grass.rebuildForField(f);
-    this.world.cullGrass(); // Belegung nach Gras-Rebuild neu anwenden
+    this.rig.trees.rebuildForField(f);
+    this.world.cullGrass(); // Belegung nach Gras-/Baum-Rebuild neu anwenden
     this.rig.clouds.setBounds(f);
     this.fieldExpansion.reposition(f);
     this.rig.sceneManager.setPanBounds(f);
@@ -249,6 +274,7 @@ export class GameSession {
     this.slotMenu.close();
     this.animalMenu.close();
     this.buildingMenu.close();
+    this.dogMenu.close();
     this.abort.abort();
     this.critters.dispose();
     this.world.dispose();

@@ -8,6 +8,7 @@ import { createBuilding, createModelBuilding } from "./Building";
 import { SlotEntity, type PickData } from "./SlotEntity";
 import type { AnimalModels } from "./AnimalModels";
 import type { Grass } from "./Grass";
+import type { Trees } from "./Trees";
 
 /** Kleiner Zusatzabstand zur Gebäudewand (der Büschel-Radius wird separat addiert). */
 const GRASS_BUILD_MARGIN = 0.1;
@@ -33,6 +34,7 @@ export class World {
     private state: GameState,
     private models: AnimalModels,
     private grass?: Grass,
+    private trees?: Trees,
   ) {
     this.scene.add(this.roadGroup);
     this.rebuild();
@@ -116,9 +118,11 @@ export class World {
     this.cullGrass();
   }
 
-  /** Blendet Gras unter Gebäuden/Straßen aus (und anderswo wieder ein). */
+  /** Blendet Gras + Bäume unter Gebäuden/Straßen aus (und anderswo wieder ein). */
   cullGrass(): void {
-    this.grass?.setOccupancy((x, z, r) => this.isOccupied(x, z, r));
+    const occ = (x: number, z: number, r: number): boolean => this.isOccupied(x, z, r);
+    this.grass?.setOccupancy(occ);
+    this.trees?.setOccupancy(occ);
   }
 
   /**

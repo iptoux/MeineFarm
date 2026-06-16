@@ -129,6 +129,11 @@ export class WeatherManager {
 
   constructor(private readonly deps: Deps) {}
 
+  /** Aktuelle Wind-Stärke (geglätteter Wetter-Multiplikator: ruhig ~0.4, Sturm ~2.4). */
+  get windStrength(): number {
+    return this.cur.windMul;
+  }
+
   setWeather(kind: WeatherKind, immediate = false): void {
     if (immediate) {
       this.schedule = { start: kind, end: kind, changeAt: null };

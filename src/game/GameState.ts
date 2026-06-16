@@ -1,5 +1,6 @@
 import { getAnimal } from "./config/animals";
 import { getBuilding } from "./config/buildings";
+import { randomDogName } from "./config/dognames";
 import { getRoad, ROAD_TILE, roadCellCenter } from "./config/roads";
 import { STARTING_UNLOCKED, STARTING_MONEY, slotUnlockCost } from "./config/slots";
 import {
@@ -48,6 +49,8 @@ export interface SaveData {
   timeOfDay: number;
   /** Wetterlage zum Speicherzeitpunkt ("clear" | "rain" | "storm" | "fog"). */
   weather: string;
+  /** Name des streunenden Hundes (seit v3 optional; fehlt → Zufallsname). */
+  dogName?: string;
   lastSaveTs: number;
 }
 
@@ -73,6 +76,8 @@ export class GameState {
   /** Tageszeit + Wetter (vom Rig pro Frame gespiegelt, damit sie mitgespeichert werden). */
   timeOfDay = 0.32;
   weather = "clear";
+  /** Name des streunenden Hundes (Default zufällig, vom Spieler änderbar). */
+  dogName = randomDogName();
 
   private listeners = new Set<Listener>();
 
@@ -92,6 +97,15 @@ export class GameState {
     this.field = { ...INITIAL_FIELD };
     this.timeOfDay = 0.32;
     this.weather = "clear";
+    this.dogName = randomDogName();
+    this.emit();
+  }
+
+  /** Setzt den Hundenamen (getrimmt; leer → unverändert). */
+  setDogName(name: string): void {
+    const trimmed = name.trim().slice(0, 24);
+    if (!trimmed) return;
+    this.dogName = trimmed;
     this.emit();
   }
 
@@ -299,6 +313,7 @@ export class GameState {
       field: this.field,
       timeOfDay: this.timeOfDay,
       weather: this.weather,
+      dogName: this.dogName,
       lastSaveTs: Date.now(),
     };
   }
