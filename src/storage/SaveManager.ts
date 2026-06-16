@@ -119,6 +119,8 @@ export class SaveManager {
     // Feldgrenzen: v3 validieren, sonst (v2 / kaputt) Startfeld. Bestehende
     // Gebäude/Straßen außerhalb bleiben erhalten – nur NEUE Platzierung ist begrenzt.
     state.field = isValidField(data.field) ? { ...data.field } : { ...INITIAL_FIELD };
+    state.timeOfDay = typeof data.timeOfDay === "number" ? data.timeOfDay : 0.32;
+    state.weather = typeof data.weather === "string" ? data.weather : "clear";
     state.buildings = data.buildings.map((b) => ({
       defId: b.defId,
       x: b.x,

@@ -44,6 +44,10 @@ export interface SaveData {
   roads: RoadTile[];
   /** Spielfeld-Grenzen (seit v3; bei v2-Ständen fehlt es → Default). */
   field: FieldBounds;
+  /** Tageszeit [0,1) zum Speicherzeitpunkt. */
+  timeOfDay: number;
+  /** Wetterlage zum Speicherzeitpunkt ("clear" | "rain" | "storm" | "fog"). */
+  weather: string;
   lastSaveTs: number;
 }
 
@@ -66,6 +70,9 @@ export class GameState {
   roads: RoadTile[] = [];
   /** Erweiterbares Spielfeld (siehe config/chunks). */
   field: FieldBounds = { ...INITIAL_FIELD };
+  /** Tageszeit + Wetter (vom Rig pro Frame gespiegelt, damit sie mitgespeichert werden). */
+  timeOfDay = 0.32;
+  weather = "clear";
 
   private listeners = new Set<Listener>();
 
@@ -83,6 +90,8 @@ export class GameState {
     );
     this.roads = [];
     this.field = { ...INITIAL_FIELD };
+    this.timeOfDay = 0.32;
+    this.weather = "clear";
     this.emit();
   }
 
@@ -288,6 +297,8 @@ export class GameState {
       slots: this.slots,
       roads: this.roads,
       field: this.field,
+      timeOfDay: this.timeOfDay,
+      weather: this.weather,
       lastSaveTs: Date.now(),
     };
   }

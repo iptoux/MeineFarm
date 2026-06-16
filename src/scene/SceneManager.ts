@@ -54,7 +54,10 @@ export class SceneManager {
     this.controls.dampingFactor = 0.08;
     this.controls.minDistance = 6;
     this.controls.maxDistance = 40;
-    this.controls.maxPolarAngle = Math.PI / 2 - 0.05; // nicht unter den Boden schauen
+    // Vertikalen Kamerawinkel begrenzen: nicht unter die Map (Horizont) und nicht
+    // senkrecht von oben über die Stern-Kuppel hinaus schauen.
+    this.controls.minPolarAngle = 0.25;
+    this.controls.maxPolarAngle = Math.PI / 2 - 0.18;
     this.controls.target.set(0, 1.2, 0);
 
     this.setupLights();

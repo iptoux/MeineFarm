@@ -15,7 +15,8 @@ import type { AudioManager } from "../audio/AudioManager";
  * Muster, mit dem der Sky bereits die Szenen-Lichter steuert.
  */
 
-export type WeatherKind = "clear" | "rain" | "storm" | "fog";
+export const WEATHER_KINDS = ["clear", "rain", "storm", "fog"] as const;
+export type WeatherKind = (typeof WEATHER_KINDS)[number];
 
 interface WeatherParams {
   density: number; // 0..1 → Wolken-Pool-Füllung

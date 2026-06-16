@@ -3,6 +3,8 @@ import type { AnimalModels } from "../scene/AnimalModels";
 import type { Grass } from "../scene/Grass";
 import type { Ground } from "../scene/Ground";
 import type { CloudManager } from "../scene/Clouds";
+import type { SkyManager } from "../scene/Sky";
+import { type WeatherManager, type WeatherKind, WEATHER_KINDS } from "../scene/Weather";
 import { CoinBurst } from "../scene/CoinBurst";
 import { World } from "../scene/World";
 import { Picker } from "../scene/Picker";
@@ -34,6 +36,8 @@ export interface Rig {
   grass: Grass;
   ground: Ground;
   clouds: CloudManager;
+  sky: SkyManager;
+  weather: WeatherManager;
   coinBurst: CoinBurst;
   audio: AudioManager;
 }
@@ -68,6 +72,11 @@ export class GameSession {
     const signal = this.abort.signal;
 
     SaveManager.loadInto(this.state, saveId);
+
+    // Tageszeit + Wetter aus dem Spielstand auf das Rig anwenden.
+    rig.sky.timeOfDay = this.state.timeOfDay;
+    const w = this.state.weather as WeatherKind;
+    rig.weather.setWeather(WEATHER_KINDS.includes(w) ? w : "clear", true);
 
     // Welt aus dem Zustand aufbauen (Gebäude + Slot-Entities + Straßen)
     this.world = new World(sceneManager.scene, this.state, models, grass);
@@ -224,6 +233,9 @@ export class GameSession {
     this.world.update(dt, tSec);
     this.ambient.update(dt);
     this.critters.update(dt);
+    // Tageszeit + Wetter aus dem Rig spiegeln, damit der Autosave sie mitschreibt.
+    this.state.timeOfDay = this.rig.sky.timeOfDay;
+    this.state.weather = this.rig.weather.target;
   }
 
   /** Baut das Spiel sauber ab: speichert, hängt Listener ab, räumt die Szene auf. */

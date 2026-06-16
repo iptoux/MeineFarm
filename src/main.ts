@@ -90,7 +90,7 @@ async function init(): Promise<void> {
     muteBtn.textContent = audio.toggleMute() ? "🔇" : "🔊";
   });
 
-  const rig: Rig = { sceneManager, models, grass, ground, clouds, coinBurst, audio };
+  const rig: Rig = { sceneManager, models, grass, ground, clouds, sky, weather, coinBurst, audio };
 
   // --- Spiel-Session + Startmenü ---
   let session: GameSession | null = null;
