@@ -25,6 +25,8 @@ import { BuildingMenu } from "../ui/BuildingMenu";
 import { AnimalMenu } from "../ui/AnimalMenu";
 import { FieldMenu } from "../ui/FieldMenu";
 import { DogMenu } from "../ui/DogMenu";
+import { MarketMenu } from "../ui/MarketMenu";
+import { SellDialog } from "../ui/SellDialog";
 import { floatMoney, floatPumpkins } from "../ui/Effects";
 
 import { AudioManager } from "../audio/AudioManager";
@@ -59,6 +61,8 @@ export class GameSession {
   private animalMenu: AnimalMenu;
   private buildingMenu: BuildingMenu;
   private dogMenu: DogMenu;
+  private marketMenu: MarketMenu;
+  private sellDialog: SellDialog;
   private placement: PlacementController;
   private roadController: RoadController;
   private fieldExpansion: FieldExpansion;
@@ -190,6 +194,20 @@ export class GameSession {
       signal,
     );
 
+    // Marktstand: Verkaufs-Dialog (Ernte zu Geld machen)
+    this.sellDialog = new SellDialog(this.state, {
+      onSell: (goodId) => {
+        const gained = this.state.sellGood(goodId);
+        if (gained > 0) audio.playPurchase();
+        return gained;
+      },
+    });
+    this.marketMenu = new MarketMenu(
+      this.state,
+      { onSell: () => this.sellDialog.open() },
+      signal,
+    );
+
     // Bau-Menü unten: Gebäude → Platzieren, Straße → Straßen-Modus
     new BuildMenu(
       this.state,
@@ -226,6 +244,10 @@ export class GameSession {
           this.animalMenu.openForSlot(index, screen);
         },
         onBuilding: (index, screen) => this.buildingMenu.openForBuilding(index, screen),
+        onBuildingLeft: (index, screen) => {
+          const defId = this.state.buildings[index]?.defId;
+          if (defId && getBuilding(defId)?.isMarket) this.marketMenu.openForMarket(index, screen);
+        },
         onField: (index, screen) => {
           const gained = this.state.harvestField(index);
           if (gained > 0) {
@@ -289,6 +311,8 @@ export class GameSession {
     this.animalMenu.close();
     this.buildingMenu.close();
     this.dogMenu.close();
+    this.marketMenu.close();
+    this.sellDialog.close();
     this.abort.abort();
     this.critters.dispose();
     this.world.dispose();

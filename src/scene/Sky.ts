@@ -12,6 +12,8 @@ import * as THREE from "three";
 
 /** Dauer eines vollen Tages in Sekunden (fuer Sichttests klein setzen). */
 const DAY_LENGTH_SEC = 360;
+/** Anteil des Zyklus, in dem die Sonne ueber dem Horizont steht (Tag 2x so lang wie Nacht). */
+const DAY_FRACTION = 2 / 3;
 /** Hoechster Sonnenstand mittags (Grad ueber dem Horizont). */
 const MAX_ELEVATION = 60;
 const SKY_RADIUS = 400;
@@ -100,9 +102,12 @@ export class SkyManager {
   }
 
   private apply(): void {
-    // Sonnenstand aus der Tageszeit: Horizont bei 0.25/0.75, Hochstand bei 0.5.
-    const elevation = MAX_ELEVATION * Math.sin(2 * Math.PI * (this.timeOfDay - 0.25));
-    const azimuth = this.timeOfDay * 360 - 90;
+    // Tageszeit -> Sonnenphase verzerren, damit der Tag laenger ist als die Nacht.
+    // Die Uhrzeit (timeOfDay) laeuft linear weiter; nur der Sonnenbogen wird gestreckt.
+    const p = phaseFromTime(this.timeOfDay);
+    // Sonnenstand aus der Phase: Horizont bei 0.25/0.75, Hochstand bei 0.5.
+    const elevation = MAX_ELEVATION * Math.sin(2 * Math.PI * (p - 0.25));
+    const azimuth = p * 360 - 90;
     const phi = THREE.MathUtils.degToRad(90 - elevation);
     const theta = THREE.MathUtils.degToRad(azimuth);
     this.sunVec.setFromSphericalCoords(1, phi, theta);
@@ -154,6 +159,21 @@ export class SkyManager {
     this.skyTint.lerp(SKY_TINT_OVERCAST, this.overcast * 0.45);
     this.skyMat.color.copy(this.skyTint);
   }
+}
+
+/**
+ * Verzerrt die lineare Tageszeit `t` [0,1) in eine Sonnenphase `p` [0,1), sodass der
+ * Tag (Sonne ueber Horizont, p in (0.25,0.75)) `DAY_FRACTION` des Zyklus einnimmt und
+ * die Nacht den Rest. Stueckweise linear, stetig & monoton. Mittag (p=0.5) bleibt bei
+ * t=0.5, daher zeigt die Uhr weiter 12:00 zum Sonnenhochstand.
+ */
+function phaseFromTime(t: number): number {
+  const nightHalf = (1 - DAY_FRACTION) / 2; // halbe Nacht je Seite (vor Aufgang / nach Untergang)
+  if (t < nightHalf) return (t / nightHalf) * 0.25; // Nacht bis Sonnenaufgang
+  if (t < nightHalf + DAY_FRACTION) {
+    return 0.25 + ((t - nightHalf) / DAY_FRACTION) * 0.5; // Tag
+  }
+  return 0.75 + ((t - nightHalf - DAY_FRACTION) / nightHalf) * 0.25; // Nacht nach Untergang
 }
 
 /** Zufaelliges Sternenfeld auf der oberen Halbkugel einer Kuppel. */

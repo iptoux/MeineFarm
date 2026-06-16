@@ -80,7 +80,8 @@ body {
 #building-menu,
 #animal-menu,
 #field-menu,
-#dog-menu {
+#dog-menu,
+#market-menu {
   position: absolute;
   min-width: 200px;
   padding: 8px;
@@ -98,8 +99,60 @@ body {
 #building-menu.hidden,
 #animal-menu.hidden,
 #field-menu.hidden,
-#dog-menu.hidden {
+#dog-menu.hidden,
+#market-menu.hidden {
   display: none;
+}
+
+/* Verkaufs-Dialog: Vollbild-Backdrop mit zentriertem Panel */
+#sell-dialog {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 30;
+}
+
+#sell-dialog.hidden {
+  display: none;
+}
+
+.sell-panel {
+  min-width: 320px;
+  max-width: 90vw;
+  padding: 16px;
+  background: rgba(28, 34, 28, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sell-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.sell-info {
+  color: #e8f0e8;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sell-close {
+  margin-top: 4px;
+  background: #3a5d8a;
+  text-align: center;
+}
+
+.sell-close:hover:not(:disabled) {
+  background: #4a72a8;
 }
 
 /* Trennlinie im Hunde-Menü (vor „Name ändern") */
@@ -198,13 +251,13 @@ body {
   width: 160px;
   height: 8px;
   border-radius: 5px;
-  /* Nacht → Morgen → Mittag → Abend → Nacht */
+  /* Nacht → Morgen → Mittag → Abend → Nacht (Tag länger: Aufgang ~16.7%, Untergang ~83.3%) */
   background: linear-gradient(
     to right,
     #16203a 0%,
-    #e88a3a 25%,
+    #e88a3a 16.7%,
     #8fd0ff 50%,
-    #e8703a 75%,
+    #e8703a 83.3%,
     #16203a 100%
   );
 }

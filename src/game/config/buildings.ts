@@ -24,6 +24,8 @@ export interface BuildingDef {
   icon?: string;
   /** Optional: dieses „Gebäude" ist ein Feld (Wachstums-Zyklus, Ernte statt Slots). */
   isField?: boolean;
+  /** Optional: dieses Gebäude ist ein Marktstand (Linksklick → Verkaufs-Menü). */
+  isMarket?: boolean;
   /** Kategorie im Bau-Menü (gruppiert die Karten im Popover). */
   category: BuildCategory;
 }
@@ -104,12 +106,13 @@ export const BUILDINGS: BuildingDef[] = [
     name: "Marktstand",
     cost: 250,
     slotCount: 0,
-    width: 8,
-    depth: 6,
+    width: 11,
+    depth: 8,
     roofColor: 0x9a5a2a,
     model: "/models/buildings/Market Stalls.glb",
     fadeAll: false,
     icon: "🛒",
+    isMarket: true,
     category: "farm",
   },
   {
@@ -117,8 +120,8 @@ export const BUILDINGS: BuildingDef[] = [
     name: "Vogelscheuche",
     cost: 20,
     slotCount: 0,
-    width: 1.6,
-    depth: 1.6,
+    width: 2.1,
+    depth: 2.1,
     roofColor: 0x8a6a3a,
     model: "/models/farm/Scarecrow.glb",
     fadeAll: false,

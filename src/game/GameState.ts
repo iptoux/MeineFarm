@@ -6,6 +6,7 @@ import {
   yieldFromWeather,
   type FieldStateName,
 } from "./config/fields";
+import { getGood } from "./config/goods";
 import { randomDogName } from "./config/dognames";
 import { getRoad, ROAD_TILE, roadCellCenter } from "./config/roads";
 import { STARTING_UNLOCKED, STARTING_MONEY, slotUnlockCost } from "./config/slots";
@@ -259,6 +260,26 @@ export class GameState {
     if (!slot || !slot.animalId || slot.pending <= 0) return 0;
     const gained = Math.floor(slot.pending);
     slot.pending = 0;
+    this.money += gained;
+    this.emit();
+    return gained;
+  }
+
+  /** Aktueller Bestand einer verkaufbaren Ware (vorerst nur Kürbisse). */
+  goodCount(goodId: string): number {
+    return goodId === "pumpkin" ? this.pumpkins : 0;
+  }
+
+  /**
+   * Verkauft den gesamten Bestand einer Ware zum Stückpreis aus dem Waren-Katalog.
+   * Gibt den Erlös (€) zurück (0 falls nichts da/unbekannte Ware).
+   */
+  sellGood(goodId: string): number {
+    const def = getGood(goodId);
+    const count = this.goodCount(goodId);
+    if (!def || count <= 0) return 0;
+    const gained = count * def.price;
+    if (goodId === "pumpkin") this.pumpkins = 0;
     this.money += gained;
     this.emit();
     return gained;
