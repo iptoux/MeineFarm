@@ -5,12 +5,14 @@ import { fieldCenter, type FieldBounds, type FieldEdge } from "../game/config/ch
 const AFFORD = new THREE.Color(0x4caf50); // bezahlbar
 const BLOCKED = new THREE.Color(0xd32f2f); // zu teuer
 /** Abstand der Pads von der Feldkante; Kantenlänge eines Pads. */
-const GAP = 5;
-const PAD_SIZE = 9;
+const GAP = 4;
+const PAD_SIZE = 5;
+/** Pixel-Bewegung, ab der ein Zeiger als Kamera-Drag (kein Klick) gilt. */
+const CLICK_THRESHOLD = 6;
 
 export interface FieldExpansionHandlers {
-  /** Nach erfolgreicher Erweiterung (View neu aufbauen + Sound). */
-  onExpanded: () => void;
+  /** Pad angeklickt → Bestätigungs-Popup für diese Kante öffnen. */
+  onRequestExpand: (edge: FieldEdge, screen: { x: number; y: number }) => void;
 }
 
 interface Pad {
@@ -30,6 +32,8 @@ export class FieldExpansion {
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
   private unsubscribe: () => void;
+  private downX = 0;
+  private downY = 0;
 
   constructor(
     private scene: THREE.Scene,
@@ -53,7 +57,10 @@ export class FieldExpansion {
     }
     this.scene.add(this.group);
 
+    // Wie der Picker: Pad-Auswahl erst beim pointerup (mit Drag-Schwelle), damit
+    // das gleichzeitig öffnende Popup nicht vom selben pointerdown geschlossen wird.
     this.dom.addEventListener("pointerdown", this.onDown, { signal });
+    this.dom.addEventListener("pointerup", this.onUp, { signal });
     // Farben aktualisieren, wenn sich Geld/Feld ändern.
     this.unsubscribe = this.state.onChange(() => this.refresh());
     this.reposition(this.state.field);
@@ -86,7 +93,14 @@ export class FieldExpansion {
   }
 
   private onDown = (e: PointerEvent): void => {
+    this.downX = e.clientX;
+    this.downY = e.clientY;
+  };
+
+  private onUp = (e: PointerEvent): void => {
     if (e.button !== 0 || this.isBusy()) return;
+    if (Math.hypot(e.clientX - this.downX, e.clientY - this.downY) > CLICK_THRESHOLD) return; // Kamera-Drag
+
     const rect = this.dom.getBoundingClientRect();
     this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -97,9 +111,7 @@ export class FieldExpansion {
     );
     if (hits.length === 0) return;
     const pad = this.pads.find((p) => p.mesh === hits[0].object);
-    if (pad && this.state.expandField(pad.edge)) {
-      this.handlers.onExpanded();
-    }
+    if (pad) this.handlers.onRequestExpand(pad.edge, { x: e.clientX, y: e.clientY });
   };
 
   dispose(): void {

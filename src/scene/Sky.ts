@@ -32,6 +32,9 @@ export class SkyManager {
   /** Tageslicht-Faktor [0,1]: 0 = Nacht, 1 = heller Tag (für Wolkenschatten o.ä.). */
   daylight = 1;
 
+  /** Normierte Sonnenrichtung (vom Boden zur Sonne) – für korrekt geneigte Wolkenschatten. */
+  readonly sunDir = new THREE.Vector3(0, 1, 0);
+
   private readonly sky: Sky;
   private readonly stars: THREE.Points;
   private readonly starMat: THREE.PointsMaterial;
@@ -97,6 +100,7 @@ export class SkyManager {
     const theta = THREE.MathUtils.degToRad(azimuth);
     this.sunVec.setFromSphericalCoords(1, phi, theta);
     this.sky.material.uniforms.sunPosition.value.copy(this.sunVec);
+    this.sunDir.copy(this.sunVec); // Einheitsvektor → Wolkenschatten-Neigung
 
     // Gerichtetes Sonnenlicht folgt der Sonne (Schatten drehen mit).
     this.sun.position.copy(this.sunVec).multiplyScalar(60);

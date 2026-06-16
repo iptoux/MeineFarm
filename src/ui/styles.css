@@ -56,7 +56,8 @@ body {
 
 #slot-menu,
 #building-menu,
-#animal-menu {
+#animal-menu,
+#field-menu {
   position: absolute;
   min-width: 200px;
   padding: 8px;
@@ -72,7 +73,8 @@ body {
 
 #slot-menu.hidden,
 #building-menu.hidden,
-#animal-menu.hidden {
+#animal-menu.hidden,
+#field-menu.hidden {
   display: none;
 }
 

@@ -20,6 +20,7 @@ import { SlotMenu } from "../ui/SlotMenu";
 import { BuildMenu } from "../ui/BuildMenu";
 import { BuildingMenu } from "../ui/BuildingMenu";
 import { AnimalMenu } from "../ui/AnimalMenu";
+import { FieldMenu } from "../ui/FieldMenu";
 import { floatMoney } from "../ui/Effects";
 
 import { AudioManager } from "../audio/AudioManager";
@@ -53,6 +54,7 @@ export class GameSession {
   private placement: PlacementController;
   private roadController: RoadController;
   private fieldExpansion: FieldExpansion;
+  private fieldMenu: FieldMenu;
   private ambient: AmbientAnimals;
   private critters: CritterManager;
   private abort = new AbortController();
@@ -110,18 +112,25 @@ export class GameSession {
       },
     );
 
-    // Spielfeld-Erweiterung („+"-Pads an den Kanten)
+    // Spielfeld-Erweiterung („+"-Pads an den Kanten) + Bestätigungs-Popup
+    this.fieldMenu = new FieldMenu(
+      this.state,
+      {
+        onConfirm: (edge) => {
+          if (this.state.expandField(edge)) {
+            this.applyField();
+            audio.playPurchase();
+          }
+        },
+      },
+      signal,
+    );
     this.fieldExpansion = new FieldExpansion(
       sceneManager.scene,
       sceneManager.camera,
       sceneManager.renderer.domElement,
       this.state,
-      {
-        onExpanded: () => {
-          this.applyField();
-          audio.playPurchase();
-        },
-      },
+      { onRequestExpand: (edge, screen) => this.fieldMenu.openForEdge(edge, screen) },
       () => this.placement.active || this.roadController.active,
       signal,
     );
@@ -222,6 +231,7 @@ export class GameSession {
     this.placement.cancel();
     this.roadController.cancel();
     this.fieldExpansion.dispose();
+    this.fieldMenu.close();
     this.stopAutosave();
     SaveManager.save(this.state, this.saveId);
     this.slotMenu.close();

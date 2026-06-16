@@ -34,8 +34,9 @@ export const BUILDINGS: BuildingDef[] = [
     depth: 10,
     roofColor: 0x8a3324,
     model: "/models/buildings/Open Barn.glb",
-    roofMaterials: ["RoofBlack"],
-    fadeAll: false,
+    // Beim Nah-Zoom das ganze Gebäude ausblenden (wie die Große Scheune) – nur das
+    // Dach reicht nicht, da darunter noch eine rote Schicht sichtbar bliebe.
+    fadeAll: true,
   },
   {
     id: "scheune",

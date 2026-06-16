@@ -3,6 +3,7 @@ import "./ui/styles.css";
 import { SceneManager } from "./scene/SceneManager";
 import { Ground } from "./scene/Ground";
 import { createGrass } from "./scene/Grass";
+import { INITIAL_FIELD } from "./game/config/chunks";
 import { SkyManager } from "./scene/Sky";
 import { CloudManager } from "./scene/Clouds";
 import { RainSystem } from "./scene/Rain";
@@ -46,6 +47,9 @@ async function init(): Promise<void> {
 
   // Ziehende Wolken mit weichen Bodenschatten
   const clouds = new CloudManager(sceneManager.scene);
+  // Im Menü (ohne Session) Schatten aufs Startfeld begrenzen – sonst „schweben"
+  // Wolkenschatten über dem leeren Void am Horizont.
+  clouds.setBounds(INITIAL_FIELD);
 
   // Animiertes Wind-Gras (prozeduraler Teppich + GLB-Büschel)
   const grass = await createGrass();
@@ -120,7 +124,7 @@ async function init(): Promise<void> {
     grass.update(tSec);
     sky.update(dt);
     weather.update(dt, sky.timeOfDay, sky.daylight);
-    clouds.update(dt, sky.daylight);
+    clouds.update(dt, sky.daylight, sky.sunDir);
     rain.update(dt);
     dayNight.update(sky.timeOfDay);
     dayNight.setWeather(weather.target);

@@ -85,17 +85,37 @@ export class CloudManager {
     this.bounds = bounds;
   }
 
-  /** Verschiebt Wolken + Schatten mit dem Wind und blendet Schatten nach Tageslicht. */
-  update(dt: number, daylight: number): void {
+  /**
+   * Verschiebt Wolken + Schatten mit dem Wind, blendet Schatten nach Tageslicht
+   * und legt den Schatten passend zum Sonnenstand versetzt ab (gleicher
+   * Einfallswinkel wie die Gebäudeschatten).
+   */
+  update(dt: number, daylight: number, sunDir?: THREE.Vector3): void {
     const shadowOpacity = SHADOW_MAX_OPACITY * THREE.MathUtils.clamp(daylight, 0, 1);
     const fade = Math.min(1, dt * VIS_FADE_RATE);
+
+    // Horizontaler Schatten-Versatz: Projektion der Wolkenhöhe entlang des
+    // Sonnenstrahls auf den Boden. Bei tiefer Sonne begrenzt, sonst „flüchtet"
+    // der Schatten ins Unendliche.
+    let ox = 0;
+    let oz = 0;
+    if (sunDir && sunDir.y > 0.08) {
+      const k = CLOUD_HEIGHT / sunDir.y;
+      const maxOff = CLOUD_HEIGHT * 2.5;
+      ox = THREE.MathUtils.clamp(-sunDir.x * k, -maxOff, maxOff);
+      oz = THREE.MathUtils.clamp(-sunDir.z * k, -maxOff, maxOff);
+    }
+
     for (const c of this.clouds) {
       let x = c.sky.position.x + WIND.x * this.windMul * dt;
       let z = c.sky.position.z + WIND.y * this.windMul * dt;
       // Am Rand auf der Gegenseite neu einsetzen (mit etwas Variation).
       if (x - c.half > SPREAD) x = -SPREAD - c.half;
       if (z - c.half > SPREAD) z = -SPREAD - c.half;
-      this.position(c, x, z);
+      c.sky.position.set(x, CLOUD_HEIGHT, z);
+      const sx = x + ox;
+      const sz = z + oz;
+      c.shadow.position.set(sx, 0.06, sz);
 
       // Sichtbarkeit weich Richtung Ziel (0 oder 1) ziehen → Wolken bauen sich
       // auf bzw. lösen sich auf, statt zu poppen.
@@ -103,9 +123,12 @@ export class CloudManager {
       c.vis += (targetVis - c.vis) * fade;
       const visible = c.vis > 0.01;
       c.sky.visible = visible;
-      // Schatten nur auf dem Spielfeld zeigen (sonst läge er auf dem leeren Void).
+      // Schatten nur zeigen, wenn seine GANZE Fläche im Feld liegt – sonst würde
+      // der Rand der Schatten-Plane über die Kante ins leere Void ragen.
       const b = this.bounds;
-      const onField = !b || (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ);
+      const sh = c.half * 1.2; // halbe Kantenlänge der Schatten-Plane (≈ maxR·1.2)
+      const onField =
+        !b || (sx - sh >= b.minX && sx + sh <= b.maxX && sz - sh >= b.minZ && sz + sh <= b.maxZ);
       c.shadow.visible = visible && onField;
       if (visible) {
         c.sky.scale.setScalar(c.vis);

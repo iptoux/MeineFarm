@@ -2,6 +2,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { FieldBounds } from "../game/config/chunks";
 
+/** Radius um den Kamera-Zielpunkt, innerhalb dessen Dächer beim Zoom ausblenden. */
+const FADE_RADIUS = 10;
+
 /**
  * Kapselt Renderer, Scene, Kamera, Steuerung und Licht.
  * Stellt scene/camera/renderer für andere Module bereit und rendert pro Frame.
@@ -21,6 +24,7 @@ export class SceneManager {
   private panSpeed = 12;
   private keys = new Set<string>();
   private fadeMeshes: THREE.Mesh[] = [];
+  private tmpFade = new THREE.Vector3();
   private lastTime = performance.now();
   /** Begrenzung für den Kamera-Zielpunkt (Spielfeld + Rand); null = unbegrenzt. */
   private panBounds: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
@@ -114,17 +118,29 @@ export class SceneManager {
     }
   }
 
-  /** Blendet das Dach abhängig vom Zoom-Abstand aus (nah = durchsichtig). */
+  /**
+   * Blendet Dächer beim Nah-Zoomen aus – aber nur die des fokussierten Gebäudes
+   * (nahe am Kamera-Zielpunkt), nicht entfernte Gebäude. Bei vollem Zoom geht die
+   * Deckkraft auf 0, damit das Dach sauber verschwindet statt als (rötlich
+   * durchscheinender) Geist stehen zu bleiben.
+   */
   private updateFade(): void {
     if (this.fadeMeshes.length === 0) return;
     const dist = this.controls.getDistance();
-    // weit (>=14) volldeckend, nah (<=8) fast transparent
-    const t = THREE.MathUtils.clamp((dist - 8) / (14 - 8), 0, 1);
-    const opacity = 0.12 + 0.88 * t;
+    // weit (>=14) volldeckend, nah (<=8) ganz transparent
+    const zoomT = THREE.MathUtils.clamp((dist - 8) / (14 - 8), 0, 1);
+    const tx = this.controls.target.x;
+    const tz = this.controls.target.z;
     for (const mesh of this.fadeMeshes) {
+      mesh.getWorldPosition(this.tmpFade);
+      const horiz = Math.hypot(this.tmpFade.x - tx, this.tmpFade.z - tz);
+      // Nur das fokussierte Gebäude (Dach nahe am Zielpunkt) ausblenden.
+      const opacity = horiz <= FADE_RADIUS ? zoomT : 1;
       const mat = mesh.material as THREE.MeshStandardMaterial;
+      mat.transparent = true;
       mat.opacity = opacity;
       mat.depthWrite = opacity > 0.95;
+      mesh.visible = opacity > 0.02;
     }
   }
 
