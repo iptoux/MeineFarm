@@ -25,27 +25,34 @@ src/
       buildings.ts        # Gebäude-Katalog (BuildingDef[])
       roads.ts            # Straßen-Konstanten + Gitter-Helfer
       slots.ts            # Startwerte + Slot-Freischalt-Kostenkurve
+      chunks.ts           # Erweiterbares Spielfeld (FieldBounds, CHUNK, Erweiterungskosten)
+      dognames.ts         # Liste cooler Hundenamen + randomDogName()
   scene/
-    SceneManager.ts       # Renderer (Tonemapping/Fog), Kamera, OrbitControls, Licht, WASD, Zoom-Fade
+    SceneManager.ts       # Renderer (Tonemapping/Fog), Kamera, OrbitControls, Licht, WASD, Zoom-Fade, Kamera-Fokus
     Ground.ts             # grüne Bodenfläche (y=0)
+    wind.ts               # Geteilter höhenmaskierter Wind-Vertex-Shader (Gras + Bäume), uTime + uWind
     Grass.ts              # Animiertes Wind-Gras (instanzierte GLB-Büschel) + Belegungs-Culling
+    Trees.ts              # Zufällig verteilte Bäume (instanziert, Wind, Belegungs-Culling, seeded) (Rig)
     Sky.ts                # SkyManager: atmosphärischer Himmel + Tag/Nacht-Zyklus + Sterne (+ daylight)
     Clouds.ts             # CloudManager: ziehende Low-Poly-Wolken + weiche Bodenschatten (Rig)
+    Weather.ts            # WeatherManager: Wetterlagen (clear/rain/storm/fog) + windStrength (Rig)
     Building.ts           # createBuilding (Primitive) + createModelBuilding (glTF)
-    AnimalModels.ts       # Lädt/normalisiert alle glTF-Modelle (Tiere, Deko-Critter, Gebäude, UI)
+    AnimalModels.ts       # Lädt/normalisiert alle glTF-Modelle (Tiere, Deko-Critter, Gebäude, UI, Herz)
     SlotEntity.ts         # Ein Slot: Marker | Tier (+Animation) | Münze
-    World.ts              # Baut Gebäude+Slots+Straßen aus dem State; Produktions-Tick; Gras-Culling
-    Critters.ts           # CritterManager: streunender Hund (A*-Pathfinding) + Frosch-Spawner (pro Session)
-    Picker.ts             # Raycaster: Links-/Rechtsklick-Routing, Klick-Durchlass
+    World.ts              # Baut Gebäude+Slots+Straßen aus dem State; Produktions-Tick; Gras-/Baum-Culling
+    Critters.ts           # CritterManager: anklickbarer Hund (A*-Pathfinding, Menü-Aktionen, Herzen) + Frosch-Spawner
+    Picker.ts             # Raycaster: Links-/Rechtsklick-Routing, Klick-Durchlass (inkl. Hund)
     CoinBurst.ts          # 3D-Münz-Funken beim Ernten
     PlacementController.ts # Gebäude/Zaun bauen/bewegen (Silhouette, R = drehen, Zaun-Snapping)
     RoadController.ts     # Straßen-Bau (Raster, Toggle)
+    FieldExpansion.ts     # „+"-Pads an den Feldkanten (Spielfeld erweitern)
     IconRenderer.ts       # Rendert ein Modell einmalig zu einer PNG-Data-URL (HUD-Icon)
   ui/
     Hud.ts                # Geldanzeige
     DayNightHud.ts        # Tageszeit-Anzeige oben mittig (Icon + Uhr + Balken)
     StartMenu.ts          # Vollbild-Startmenü: Spielstände anlegen/laden/löschen
-    SlotMenu.ts, BuildMenu.ts, BuildingMenu.ts, AnimalMenu.ts, Effects.ts
+    DogMenu.ts            # Hunde-Kontextmenü: Füttern/Streicheln/Spielen/Name ändern
+    SlotMenu.ts, BuildMenu.ts, BuildingMenu.ts, AnimalMenu.ts, FieldMenu.ts, Effects.ts
     styles.css
   storage/SaveManager.ts  # localStorage: mehrere benannte Spielstände + Autosave + Offline-Gutschrift
   audio/
@@ -54,8 +61,8 @@ src/
 public/
   models/animals/*.glb    # Tier-Modelle (Poly Pizza); Shiba Inu.glb + Frog.glb = Deko-Critter; Husky.glb ungenutzt
   models/buildings/*.glb  # Gebäude-Modelle (Open/Big Barn + Fence/Fence_big = Zäune genutzt)
-  models/world/*.glb      # Grass Patch.glb + grass yellowing.glb (Gras); Fertile soil.glb ungenutzt
-  models/ui/*.glb         # Coin.glb, Coin Piles.glb
+  models/world/*.glb      # Grass Patch.glb + grass yellowing.glb (Gras); Trees.glb (5 Bäume); Fertile soil.glb ungenutzt
+  models/ui/*.glb         # Coin.glb, Coin Piles.glb, Heart.glb (Streichel-Herzen)
   sounds/*.mp3            # Musik + Ambience + Tierrufe (sounds/animals/<id>.mp3); Mixkit, siehe CREDITS.md
   sounds/*.wav            # SFX (collect/unlock/purchase/build)
 ```
@@ -67,10 +74,11 @@ public/
 Die App trennt **persistente Infrastruktur** von einem **austauschbaren Spiel**:
 
 - **Rig** (in [main.ts](../src/main.ts) einmalig erzeugt, lebt für die ganze
-  Seitensitzung): `SceneManager`, `AnimalModels`, `Grass`, `CoinBurst`,
-  `AudioManager` — plus `SkyManager` und `DayNightHud`. Boden, Gras, Licht und
-  Himmel hängen dauerhaft in der Szene. Hier läuft auch die **einzige**
-  Render-/Update-Schleife ([Game.ts](../src/game/Game.ts)).
+  Seitensitzung): `SceneManager`, `AnimalModels`, `Grass`, `Trees`, `CoinBurst`,
+  `AudioManager` — plus `SkyManager`, `WeatherManager`, `CloudManager` und
+  `DayNightHud`. Boden, Gras, Bäume, Licht und Himmel hängen dauerhaft in der
+  Szene. Hier läuft auch die **einzige** Render-/Update-Schleife
+  ([Game.ts](../src/game/Game.ts)).
 - **GameSession** ([GameSession.ts](../src/game/GameSession.ts)): ein konkreter
   Spielstand. Besitzt `GameState`, die sichtbare `World` und alle an den State
   gebundenen Objekte (HUD, Kontextmenüs, `PlacementController`,
@@ -85,10 +93,13 @@ Die App trennt **persistente Infrastruktur** von einem **austauschbaren Spiel**:
   ruft `abort()` → automatische Abmeldung, keine Leaks beim Spielwechsel.
 
 **Loop** ([main.ts](../src/main.ts)): `session?.update(dt,tSec)`,
-`coinBurst.update`, `grass.update(tSec)` (Wind), `sky.update(dt)` (Tag/Nacht),
-`clouds.update(dt, sky.daylight)` (Wolken/Schatten), `dayNight.update(sky.timeOfDay)`.
-`session.update` selbst tickt Produktion (`world.update`), die Hintergrund-Rufe
-(`ambient.update`) **und** die Deko-Critter (`critters.update`).
+`coinBurst.update`, `grass.update(tSec)` + `grass.setWind(weather.windStrength)`,
+`trees.update(tSec, weather.windStrength)` (beide wiegen wetterabhängig im Wind,
+§9/§21), `sky.update(dt)` (Tag/Nacht), `weather.update(...)`,
+`clouds.update(dt, sky.daylight, sky.sunDir)` (Wolken/Schatten),
+`dayNight.update(sky.timeOfDay)`. `session.update` selbst tickt Produktion
+(`world.update`), die Hintergrund-Rufe (`ambient.update`) **und** die Deko-Critter
+(`critters.update`, inkl. Herzen-Effekt).
 
 **Datenfluss innerhalb einer Session:** `GameState` ist reine Daten +
 `onChange`-Events. `World` liest den State und baut die Szene. UI-Komponenten
@@ -159,8 +170,9 @@ und Eat (3–6 s) per Crossfade umgeschaltet. Clip-Auswahl:
 - Eat: enthält `eat`, aber **nicht** `death` (sonst matcht „Death" fälschlich).
 
 > **Deko-Critter** (keine kaufbaren Tiere, nicht im Katalog): `Shiba Inu.glb`
-> (streunender Hund) und `Frog.glb` (Frösche) werden separat geladen und vom
-> `CritterManager` animiert bewegt — siehe **§19**. Ungenutztes Modell: `Husky.glb`.
+> (streunender, **anklickbarer** Hund mit Namen + Menü-Aktionen) und `Frog.glb`
+> (Frösche) werden separat geladen und vom `CritterManager` animiert bewegt —
+> siehe **§19**. Ungenutztes Modell: `Husky.glb`.
 
 ---
 
@@ -286,10 +298,15 @@ je 1 Draw-Call):
   lückenlose Abdeckung (reines Zufalls-Streuen erzeugt Klumpen + kahle Stellen).
 - **Akzente**: `grass yellowing.glb` (trocken), ~350 Instanzen rein zufällig
   (`scatter: true`).
-- **Wind**: höhenmaskierter Vertex-Shader via `material.onBeforeCompile`
-  (`#include <begin_vertex>` patchen). Wurzel (y≈0) fix, Spitze schwingt; zwei
-  überlagerte Sinuswellen + Phasenversatz aus der Instanz-Weltposition. Alle
-  Materialien teilen **eine** `uTime`-Uniform, gesetzt in `grass.update(tSec)`.
+- **Wind**: höhenmaskierter Vertex-Shader, ausgelagert nach
+  [wind.ts](../src/scene/wind.ts) (`applyWind`, via `material.onBeforeCompile`,
+  `#include <begin_vertex>` patchen). Wurzel (y≈0) fix, Spitze schwingt; zwei
+  überlagerte Sinuswellen + Phasenversatz aus der Instanz-Weltposition. Zwei
+  geteilte Uniforms: **`uTime`** (Zeit, `grass.update(tSec)`) und **`uWind`**
+  (Stärke-Multiplikator, `grass.setWind(strength)`). Effektive Auslenkung =
+  `amplitude · uWind`. Die Stärke kommt pro Frame aus `weather.windStrength`
+  (ruhig ~0.4 bei Nebel, ~1.0 klar, ~2.4 im Sturm) → Gras wogt bei Unwetter
+  sichtbar stärker. **Bäume** teilen denselben Helfer (§21).
 
 **Belegungs-Culling** — `grass.setOccupancy(pred)` blendet Gras unter Gebäuden/
 Straßen aus. Ausgelöst von [World.ts](../src/scene/World.ts) in
@@ -350,13 +367,16 @@ löst nichts aus):
 | **Linksklick** Münze | ernten (`onBubble`) |
 | **Linksklick** Tier | Verkaufen-Menü (`onAnimal`) |
 | **Linksklick** Slot-Marker | Freischalten/Tier-Kauf-Menü (`onMarker`) |
+| **Linksklick** Hund | Hunde-Menü + Auswahl/Kamera-Fokus (`onDog`, §19) |
 | **Rechtsklick** Gebäude | Gebäude-Menü Bewegen/Drehen/Entfernen (`onBuilding`) |
 
-Pickbare Meshes tragen `userData: PickData { kind, slotIndex?, buildingIndex? }`.
-**Klick-Durchlass:** Meshes mit `transparent && opacity < 0.5` werden ignoriert —
-so klickt man durch ein ausgeblendetes (gezoomtes) Dach auf Tiere/Münzen.
-Der Raycaster prüft **nur** die von `world.pickables()` gelieferte Liste; Deko-Critter
-(Hund/Frösche) stehen nicht darin und stören Ernten/Verkaufen daher nicht.
+Pickbare Meshes tragen `userData: PickData { kind, slotIndex?, buildingIndex? }`
+(`kind` = `marker|bubble|animal|building|dog`). **Klick-Durchlass:** Meshes mit
+`transparent && opacity < 0.5` werden ignoriert — so klickt man durch ein
+ausgeblendetes (gezoomtes) Dach auf Tiere/Münzen. Der Raycaster prüft die Liste
+`[...world.pickables(), ...critters.dogPickables()]`: der **Hund ist anklickbar**
+(linke Maustaste → Hunde-Menü, §19), die **Frösche** stehen nicht darin und stören
+Ernten/Verkaufen nicht.
 
 ---
 
@@ -373,9 +393,11 @@ Gebäude je `fadeAll`); pro Session via `sceneManager.setFadeOnZoom(...)` gesetz
 ## 13. glTF-Modelle — Konventionen (WICHTIG)
 
 Geladen & normalisiert in [AnimalModels.ts](../src/scene/AnimalModels.ts) (Name
-historisch; lädt Tiere **und** Gebäude **und** UI-Münzen). Alles wird in `load()`
-**vor** dem Welt-Aufbau geladen (`await models.load()` im Rig-Aufbau). Gras-GLBs
-lädt separat [Grass.ts](../src/scene/Grass.ts) (`createGrass`).
+historisch; lädt Tiere **und** Gebäude **und** UI-Modelle: Münze, Münzhaufen,
+**Herz** `getHeart()` für den Streichel-Effekt §19). Alles wird in `load()`
+**vor** dem Welt-Aufbau geladen (`await models.load()` im Rig-Aufbau). Gras- und
+Baum-GLBs laden separat [Grass.ts](../src/scene/Grass.ts) (`createGrass`) bzw.
+[Trees.ts](../src/scene/Trees.ts) (`createTrees`).
 
 - **Normalisierung Tiere:** uniform auf `def.size` (längste Kante), in x/z
   zentriert, Füße auf y=0.
@@ -432,8 +454,10 @@ startet beide Loops.
 
 - **Index** `meinhaustier:saves`: Liste leichter Metadaten (`SaveMeta {id, name,
   lastSaveTs, money}`) für die Menü-Liste.
-- **Pro Stand** `meinhaustier:save:<id>`: vollständige `SaveData` (version 2;
-  `money`, `buildings` inkl. `rotation`, `slots`, `roads`, `lastSaveTs`).
+- **Pro Stand** `meinhaustier:save:<id>`: vollständige `SaveData` (version 3;
+  `money`, `buildings` inkl. `rotation`, `slots`, `roads`, `field` (Spielfeld-
+  Grenzen), `timeOfDay`, `weather`, **`dogName`** (optional; fehlt → Zufallsname),
+  `lastSaveTs`). v2-Stände (ohne `field`) werden weiter geladen (Startfeld-Default).
 - **Legacy-Migration**: ein alter Einzel-Stand `meinhaustier:save:v2` wird beim
   Modul-Load **einmalig** in einen benannten Slot überführt.
 - **API**: `listSaves()`, `createSave(name)`, `deleteSave(id)`, `loadInto(state,
@@ -454,12 +478,14 @@ und einem **Dev-Debug-Hook**. In [main.ts](../src/main.ts) wird unter
 `import.meta.env.DEV` gesetzt:
 
 ```js
-window.__game = { rig, sceneManager, sky, grass, get session() }
+window.__game = { rig, sceneManager, sky, weather, grass, trees, ground, clouds, get session() }
 ```
 
-`rig` = `{ sceneManager, models, grass, coinBurst, audio }`. **State und World
-liegen jetzt unter der Session**: `__game.session.state`, `__game.session.world`.
-Es muss zuerst ein Spiel laufen (Startmenü!), sonst ist `session` `null`.
+`rig` = `{ sceneManager, models, grass, trees, ground, clouds, sky, weather,
+coinBurst, audio }`. **State und World liegen jetzt unter der Session**:
+`__game.session.state`, `__game.session.world`. Es muss zuerst ein Spiel laufen
+(Startmenü!), sonst ist `session` `null`. Wetter zum Testen forcieren:
+`__game.weather.setWeather("storm")` (Gras + Bäume wogen dann stärker, §9/§21).
 
 Muster (Dev-Server auf :5173):
 ```js
@@ -493,10 +519,12 @@ Read-Tool prüfen → Skript & PNG löschen.
 
 Nützliche Hooks: `session.world.bubbleWorldPos(i)` (Welt-Pos einer Münze),
 `session.world.animalClip(i)` (laufender Clip), `session.state.slotBase(b)`,
+`session.state.dogName`/`setDogName(n)` (Hundename),
 `sky.timeOfDay`/`sky.speed` (Tageszeit steuern/anhalten),
+`weather.setWeather(kind, immediate)`/`weather.windStrength` (Wetter/Wind),
 `grass.cullables` (sichtbare/Gesamt-Instanzen prüfen),
-`sceneManager.camera/controls` (Kamera für Screenshots),
-`session.critters.dog.object.position` / `session.critters.frogs` (Hund/Frösche),
+`sceneManager.camera/controls`, `sceneManager.focusOn(pos)`/`clearFocus()` (Kamerafahrt),
+`session.critters.selectDog(camPos)`/`deselectDog()`/`feedDog()`/`petDog()`/`playWithDog()`,
 `session.placement` (`begin(def)`, `rotation`, `isValid(x,z)` für Platzierungs-Tests).
 
 ---
@@ -544,6 +572,13 @@ drehbar/snappbar ohne weiteren Code (§5.1). Blockiert den Hund automatisch (§1
   (`slotCount > 0`); Zäune blockieren ganz.
 - **Zäune blockieren sich nicht gegenseitig** (Platzierung, §5.1) — bewusst, damit
   Ecken/Reihen baubar sind. Nicht „reparieren".
+- **Baum-Materialien mattieren** (`metalness 0`, `roughness 1`): die GLB-Materialien
+  sind glänzend und erzeugen sonst grelle Specular-Flecken am Laub (§21).
+- **Hund-Aktions-Clips teilen die Idle-Instanz**: `clipAction` liefert pro Clip
+  dieselbe `AnimationAction` → Loop-Modus **pro `switchTo()`** setzen, nie einmalig
+  (sonst spielen geteilte Idle-Clips nur noch einmal statt zu loopen) — §19.
+- **Wind ist wetterabhängig**: Gras **und** Bäume teilen `wind.ts` (`uWind` aus
+  `weather.windStrength`). Amplituden sind Basiswerte × `uWind` (§9/§21).
 
 ---
 
@@ -553,20 +588,51 @@ drehbar/snappbar ohne weiteren Code (§5.1). Blockiert den Hund automatisch (§1
 [GameSession.ts](../src/game/GameSession.ts) erzeugt/`update`d/`dispose`d). Liest
 direkt `state.buildings` (Footprints) und `state.roads`; das Nav-Gitter wird beim
 nächsten Wegfinden neu aufgebaut (immer aktuell, keine Subscription). Modelle aus
-`DECOR` (§13): `shiba` (size 1.5), `frog` (0.45). Beide werfen Schatten (`castShadow`)
-und sind **nicht** anklickbar (§11).
+`DECOR` (§13): `shiba` (size 2.0), `frog` (0.45). Beide werfen Schatten (`castShadow`);
+der **Hund ist anklickbar** (Menü/Aktionen, s.u.), die Frösche nicht (§11).
 
-**Hund (`Dog`)** — ein Shiba, streift den Hof ab:
-- Zustände `walk ↔ pause`; Pause spielt Idle/Idle_2/Eating (Schnüffeln/Grasen),
-  weite Ziele werden im `gallop` angesteuert. Ausrichtung dreht weich
-  (`lerpAngle`). Clip-Auswahl über `makeAction` (exakt → `|name` → Teilstring,
-  damit `idle` nicht `Idle_HitReact` trifft).
+**Hund (`Dog`)** — ein Shiba, streift den Hof ab und ist **anklickbar**:
+- Zustände `walk ↔ pause ↔ action`; Pause spielt Idle/Idle_2/Eating
+  (Schnüffeln/Grasen), weite Ziele werden im `gallop` angesteuert. Ausrichtung
+  dreht weich (`lerpAngle`). Clip-Auswahl über `makeAction` (exakt → `|name` →
+  Teilstring, damit `idle` nicht `Idle_HitReact` trifft).
 - **Pathfinding**: grobes Belegungs-Gitter (`AREA = 40`, `CELL = 2`) + **A\***
   (`planPath`, 8-Nachbarschaft). Gebäude-Footprints (gedreht) sind blockiert; Ställe
   haben eine **Tür-Lücke** an der offenen Vorderseite (lokales +z, `DOOR_HALF`),
   sodass der Hund hinein **und** wieder heraus findet. Zäune blockieren komplett.
+  Bäume blockieren **nicht** (reine Deko).
 - **Höhe**: im Gebäude-Footprint auf `FLOOR_TOP_Y`, sonst y=0 (weich interpoliert) →
   kein Einsinken im Stall.
+
+**Hund anklicken — Auswahl, Menü, Aktionen (Shiba-Clips):**
+- `CritterManager.dogPickables()` liefert die Hund-Meshes (mit `userData.kind="dog"`)
+  in die Picker-Liste (§11). Linksklick → `onDog` ([GameSession](../src/game/GameSession.ts)):
+  `critters.selectDog(camera.position)` + `sceneManager.focusOn(headPos)` +
+  `dogMenu.openForDog()`.
+- **Auswahl/Einfrieren**: `Dog.setSelected(true)` stoppt das Roaming (Idle), der Hund
+  bleibt stehen, bis das Menü zugeht. `faceTowards(point)` dreht ihn sanft **zur
+  Kamera** (man sieht sein Gesicht). `setSelected(false)` (Menü-`onClose`) lässt ihn
+  weiterstreunen.
+- **Kamerafahrt**: `SceneManager.focusOn(point, dist=6)` sichert die aktuelle Ansicht
+  und fährt per Ease-Tween (0.6 s) nah heran (behält die horizontale Blickrichtung,
+  leicht erhöht). `clearFocus()` fährt zurück. Während des Tweens ist `controls`
+  deaktiviert; WASD/Pan pausieren.
+- **Aktionen** (`DogMenu` → `feedDog/petDog/playWithDog` → `Dog.triggerAction`,
+  einmalige Clips via `switchTo(action, force=true)`, `actionTimer ≤ 2.5 s`):
+  *Füttern* = `Eating`, *Streicheln* = `Idle_2_HeadLow` (+ Herzen), *Spielen* =
+  `Jump_ToIdle`. **Wichtig:** `clipAction` liefert pro Clip **dieselbe Instanz** wie
+  die Idle-Pausen → der Loop-Modus (`LoopOnce`/`LoopRepeat`) wird **pro `switchTo()`**
+  gesetzt, nicht einmalig im Konstruktor (sonst loopen geteilte Idle-Clips nicht mehr).
+- **Herzen** (`HeartBurst` in `Critters.ts`, Vorbild `CoinBurst`): `petDog()` spawnt
+  ~5 `Heart.glb`-Klone (`models.getHeart()`) über dem Kopf, die aufsteigen, mit einer
+  Sinus-Hüllkurve einploppen/schrumpfen und nach ~1,1 s verschwinden. `update(dt)`
+  läuft in `critters.update`.
+- **Name**: `GameState.dogName` (Default `randomDogName()` aus
+  [dognames.ts](../src/game/config/dognames.ts), §1), **persistent** im Save (§15).
+  `DogMenu` zeigt ihn als Titel; „Name ändern" blendet eine Inline-Eingabe ein
+  (`setDogName`, max 24 Zeichen; `keydown`-`stopPropagation`, damit WASD-Tippen nicht
+  die Kamera bewegt). Das Menü positioniert sich **links der Mitte** (Hund ist durch
+  den Fokus in der Bildmitte → wird nicht verdeckt).
 
 **Frösche (`FrogSpawner`)**:
 
@@ -597,3 +663,38 @@ und sind **nicht** anklickbar (§11).
 
 > Stellschrauben oben in der Datei: `CLOUD_COUNT` (Dichte), `CLOUD_HEIGHT` (Höhe),
 > `WIND` (Tempo/Richtung), `SHADOW_MAX_OPACITY` (Schatten-Stärke).
+
+---
+
+## 21. Bäume (zufällig verteilt, „drüber bauen")
+
+[Trees.ts](../src/scene/Trees.ts), einmalig per `await createTrees()` (Teil des
+Rigs). **Spiegelt das Gras** (§9): instanziert + Belegungs-Culling, teilt sich den
+Wind-Shader ([wind.ts](../src/scene/wind.ts)).
+
+- **Modell**: `models/world/Trees.glb` enthält **5 Varianten** (`NormalTree_1..5`),
+  je 2 Primitive mit den geteilten Materialien `NormalTree_Bark` / `NormalTree_Leaves`.
+  `createTrees()` extrahiert pro Variante Stamm- und Kronen-Geometrie **getrennt** (auf
+  die Welt-Matrix gebacken, gemeinsam normalisiert: Basis y=0, in x/z zentriert, auf
+  `TREE_HEIGHT ≈ 5` skaliert).
+- **Modell-Materialien sind glänzend** (`metalness 0.4`, `roughness 0.3`) → erzeugen
+  grelle grüne Specular-„Glüh"-Flecken. Beim Laden auf **matt** gesetzt
+  (`metalness 0`, `roughness 1`, kein Emissive). Nicht regressen lassen.
+- **Verteilung** (`rebuildForField(field)`): Anzahl skaliert mit der Fläche
+  (`BASE_COUNT ≈ 40` fürs Startfeld, gedeckelt `CAP ≈ 120`), Platzierung per *jittered
+  grid* mit **seeded RNG** (`mulberry32`, Seed aus der Feldgröße) → **stabiles Layout**
+  über Reloads; bei Feld-Erweiterung wächst die Fläche mit. Pro genutzter Variante zwei
+  `InstancedMesh` (Bark + Leaves, **dieselben** Instanz-Matrizen). Wind (`applyWind`) nur
+  auf das **Leaves**-Material (höhenmaskiert → Stamm steif, Krone wiegt; Phase aus
+  `instanceMatrix` pro Baum). `update(tSec, windStrength)` setzt `uTime`/`uWind`.
+- **„Man kann darüber bauen"** — `setOccupancy(isOccupied)` nutzt **dieselbe
+  Compaction** wie das Gras (sichtbare Instanzen nach vorne packen, `count` senken):
+  Bäume unter Gebäuden/Straßen werden ausgeblendet, **ohne** zu kollidieren/blockieren.
+  Ausgelöst von [World.ts](../src/scene/World.ts) `cullGrass()` (cullt jetzt Gras **und**
+  Bäume) bei jeder strukturellen Änderung. Belegungsradius = **Stamm** (`TRUNK_RADIUS`),
+  nicht die Krone — Bäume verschwinden also erst, wenn der Stamm verbaut wird.
+- **Feld-Sync**: [GameSession](../src/game/GameSession.ts) `applyField()` ruft
+  `trees.rebuildForField(f)` (neben Gras/Boden/Wolken) und danach `world.cullGrass()`.
+
+> Stellschrauben oben in der Datei: `TREE_HEIGHT`, `BASE_COUNT`/`CAP` (Dichte/Deckel),
+> `LEAF_AMP` (Wind-Amplitude der Krone), `TRUNK_RADIUS` (Belegungs-Footprint).

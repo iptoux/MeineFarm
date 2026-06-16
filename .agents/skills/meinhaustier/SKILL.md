@@ -15,21 +15,30 @@ Tag/Nacht, Spielstände. Immer zuerst dort die relevante Sektion lesen.
   **immer `pnpm build`** zum Typecheck.
 
 ## Architektur in einem Satz (docs §2)
-Ein persistentes **Rig** (`SceneManager`, `AnimalModels`, `Grass`, `CloudManager`,
-`CoinBurst`, `AudioManager`, `SkyManager`, `DayNightHud`) und die **einzige**
-Render-Schleife leben in `main.ts`; pro Spielstand kapselt eine **`GameSession`**
-`GameState`, `World`, die Deko-Critter (`CritterManager`), die Hintergrund-Rufe
-(`AmbientAnimals`) und alle State-gebundenen UI-/Controller (mit
-`AbortController`-Cleanup). Startmenü ↔ Session über `onPlay(id)` / `session.dispose()`.
+Ein persistentes **Rig** (`SceneManager`, `AnimalModels`, `Grass`, `Trees`,
+`CloudManager`, `WeatherManager`, `CoinBurst`, `AudioManager`, `SkyManager`,
+`DayNightHud`) und die **einzige** Render-Schleife leben in `main.ts`; pro
+Spielstand kapselt eine **`GameSession`** `GameState`, `World`, die Deko-Critter
+(`CritterManager`), die Hintergrund-Rufe (`AmbientAnimals`) und alle
+State-gebundenen UI-/Controller (mit `AbortController`-Cleanup). Startmenü ↔ Session
+über `onPlay(id)` / `session.dispose()`.
 
-## Zusatz-Systeme (docs §5.1, §14, §19, §20)
+## Zusatz-Systeme (docs §5.1, §9, §14, §19, §20, §21)
 - **Platzierung**: `R` dreht (90°), Zäune (`slotCount: 0`) snappen an Enden und
   blockieren sich **nicht** gegenseitig (docs §5.1).
 - **Audio**: zwei Loops (Musik + Ambience) + Tierrufe `playAnimalCall(id)`
   (`sounds/animals/<id>.mp3`); zufällige Hintergrund-Rufe via `AmbientAnimals` (§14).
-- **Critter** (`Critters.ts`, pro Session): streunender Hund mit A*-Pathfinding
-  (umgeht Gebäude, Tür-Lücke nur bei Ställen, Zäune blockieren ganz) + seltene
-  Frösche über Straßen (max. 2). Deko-Modelle in `DECOR` (`AnimalModels.ts`) (§19).
+- **Hund** (`Critters.ts`, pro Session): streunender Hund mit A*-Pathfinding (umgeht
+  Gebäude, Tür-Lücke nur bei Ställen, Zäune blockieren ganz). **Anklickbar** → Menü
+  (`DogMenu`) *Füttern/Streicheln/Spielen/Name ändern*: friert ein, dreht sich zur
+  Kamera, `sceneManager.focusOn` fährt heran; Aktionen spielen Shiba-Clips, Streicheln
+  spawnt Herzen (`HeartBurst`, `Heart.glb`). Name (`state.dogName`) ist persistent. Plus
+  seltene Frösche über Straßen (max. 2). Deko-Modelle in `DECOR` (`AnimalModels.ts`) (§19).
+- **Bäume** (`Trees.ts`, Rig): 5 Varianten aus `Trees.glb`, instanziert + seeded
+  verteilt, wiegen im Wind, unter Gebäuden/Straßen per Belegungs-Culling ausgeblendet
+  (**„drüber bauen"**, keine Kollision). Materialien matt setzen (§21).
+- **Wind** (`wind.ts`): geteilter Shader für Gras + Bäume; Stärke `uWind` aus
+  `weather.windStrength` → bei Sturm/Unwetter stärker (§9).
 - **Wolken** (`Clouds.ts`, Rig): ziehende Low-Poly-Wolken + gefälschte Schatten-Decals,
   nachts via `sky.daylight` ausgeblendet (§20).
 
@@ -81,9 +90,11 @@ Ablauf:
 4. **Aufräumen**: `_verify.mjs` und Screenshots löschen.
 
 Nützliche Hooks: `session.world.bubbleWorldPos(i)`, `session.world.animalClip(i)`,
-`session.state.slotBase(b)`, `sky.timeOfDay`/`sky.speed` (Tageszeit setzen/anhalten),
-`grass.cullables` (sichtbare/Gesamt-Instanzen), `sceneManager.camera/controls`,
-`session.critters.dog.object.position`/`session.critters.frogs` (Critter),
+`session.state.slotBase(b)`, `session.state.dogName`/`setDogName(n)`,
+`sky.timeOfDay`/`sky.speed` (Tageszeit setzen/anhalten),
+`weather.setWeather(kind)`/`weather.windStrength` (Wetter/Wind, Bäume+Gras),
+`grass.cullables` (sichtbare/Gesamt-Instanzen), `sceneManager.camera/controls`/`focusOn`,
+`session.critters.selectDog(camPos)`/`feedDog`/`petDog`/`playWithDog`/`frogs` (Critter),
 `session.placement` (`begin`/`rotation`/`isValid` für Platzierungs-Tests).
 
 ## Stil
