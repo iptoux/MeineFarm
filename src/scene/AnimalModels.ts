@@ -18,11 +18,25 @@ const PUMPKIN_SIZE = 0.7;
 const COIN_URL = "/models/ui/Coin.glb";
 const COIN_PILE_URL = "/models/ui/Coin Piles.glb";
 const HEART_URL = "/models/ui/Heart.glb";
+const POND_URL = "/models/world/Pond.glb";
+/** Zielgröße (längste Kante) des Teich-Modells (≈ 2·POND_RADIUS). */
+const POND_SIZE = 9;
 
 /** Dekorative, nicht kaufbare Modelle (streunender Hund, Frosch). */
 const DECOR: { id: string; url: string; size: number }[] = [
   { id: "shiba", url: "/models/animals/Shiba Inu.glb", size: 2.0 },
   { id: "frog", url: "/models/animals/Frog.glb", size: 0.45 },
+];
+
+/**
+ * Vogel-Modelle für die fliegende Deko-Schar. `simple_bird`/`flying_bird` sind
+ * Einzelvögel; `bird` ist ein Schwarm (mehrere Vögel in einem Modell) und daher
+ * größer normalisiert.
+ */
+const BIRD_MODELS: { id: string; url: string; size: number }[] = [
+  { id: "simple_bird", url: "/models/world/simple_bird.glb", size: 1.6 },
+  { id: "flying_bird", url: "/models/world/flying_bird.glb", size: 1.8 },
+  { id: "bird", url: "/models/world/bird.glb", size: 4.5 },
 ];
 
 /**
@@ -35,8 +49,11 @@ export class AnimalModels {
   private clips = new Map<string, THREE.AnimationClip[]>();
   private buildings = new Map<string, THREE.Object3D>();
   private fieldModels = new Map<FieldStateName, THREE.Object3D>();
+  /** IDs erfolgreich geladener Vogel-Modelle (für BirdManager). */
+  private loadedBirds: string[] = [];
   private coin: THREE.Object3D | null = null;
   private coinPile: THREE.Object3D | null = null;
+  private pond: THREE.Object3D | null = null;
   private pumpkin: THREE.Object3D | null = null;
   private pumpkinIcon: THREE.Object3D | null = null;
   private heart: THREE.Object3D | null = null;
@@ -68,6 +85,16 @@ export class AnimalModels {
           this.clips.set(d.id, gltf.animations ?? []);
         } catch {
           // ohne Modell wird der Critter einfach nicht erzeugt
+        }
+      }),
+      ...BIRD_MODELS.map(async (d) => {
+        try {
+          const gltf = await loader.loadAsync(d.url);
+          this.templates.set(d.id, this.normalize(gltf.scene, d.size, false));
+          this.clips.set(d.id, gltf.animations ?? []);
+          this.loadedBirds.push(d.id);
+        } catch {
+          // ohne Modell fehlt dieser Vogel-Typ einfach in der Auswahl
         }
       }),
       (async () => {
@@ -106,6 +133,14 @@ export class AnimalModels {
           this.pumpkin = this.normalize(gltf.scene, PUMPKIN_SIZE, false);
         } catch {
           /* Fallback-Kugel in FieldEntity */
+        }
+      })(),
+      (async () => {
+        try {
+          const gltf = await loader.loadAsync(POND_URL);
+          this.pond = this.normalize(gltf.scene, POND_SIZE, true);
+        } catch {
+          /* ohne Modell wird kein Teich gezeichnet */
         }
       })(),
       (async () => {
@@ -210,6 +245,11 @@ export class AnimalModels {
     return this.clips.get(animalId) ?? [];
   }
 
+  /** IDs der verfügbaren Vogel-Modelle (für die fliegende Deko-Schar). */
+  birdIds(): string[] {
+    return this.loadedBirds;
+  }
+
   /** Klon der Münze (mit geklonten Materialien für individuelles Einfärben) oder null. */
   getCoin(): THREE.Object3D | null {
     if (!this.coin) return null;
@@ -249,6 +289,11 @@ export class AnimalModels {
   /** Vorlage des Kürbisses für das HUD-Icon (oder null). */
   getPumpkinIcon(): THREE.Object3D | null {
     return this.pumpkinIcon ? this.pumpkinIcon.clone(true) : null;
+  }
+
+  /** Klon des Teich-Modells (oder null). */
+  getPond(): THREE.Object3D | null {
+    return this.pond ? this.pond.clone(true) : null;
   }
 
   /** Klon-Instanz des Herzens (für den Streichel-Effekt) oder null. */

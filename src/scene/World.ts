@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { GameState } from "../game/GameState";
+import { POND_RADIUS } from "../game/GameState";
 import { getAnimal } from "../game/config/animals";
 import { getBuilding } from "../game/config/buildings";
 import { ROAD_TILE, getRoad, roadCellCenter, worldToCell } from "../game/config/roads";
@@ -15,6 +16,8 @@ import type { Trees } from "./Trees";
 
 /** Kleiner Zusatzabstand zur Gebäudewand (der Büschel-Radius wird separat addiert). */
 const GRASS_BUILD_MARGIN = 0.1;
+/** Höhe, auf der Teiche liegen (knapp über dem Boden, gegen Z-Fighting). */
+const POND_Y = 0.02;
 
 /**
  * Verwaltet die sichtbare Welt: Gebäude-Meshes + ihre Slot-Entities und die
@@ -31,6 +34,7 @@ export class World {
   private roadGroup = new THREE.Group();
   private roadGeo = new THREE.BoxGeometry(ROAD_TILE, 0.08, ROAD_TILE);
   private roadMats = new Map<string, THREE.MeshStandardMaterial>();
+  private pondGroup = new THREE.Group();
   /** Dach-Platten zum Ausblenden beim Zoom — Array-Referenz bleibt stabil. */
   readonly roofMeshes: THREE.Mesh[] = [];
 
@@ -42,6 +46,7 @@ export class World {
     private trees?: Trees,
   ) {
     this.scene.add(this.roadGroup);
+    this.scene.add(this.pondGroup);
     this.rebuild();
   }
 
@@ -61,6 +66,7 @@ export class World {
 
     for (let b = 0; b < this.state.buildings.length; b++) this.addBuildingVisuals(b);
     this.rebuildRoads();
+    this.rebuildPonds();
   }
 
   /**
@@ -84,6 +90,8 @@ export class World {
     this.roadGeo.dispose();
     for (const mat of this.roadMats.values()) mat.dispose();
     this.roadMats.clear();
+    this.scene.remove(this.pondGroup);
+    this.pondGroup.clear();
   }
 
   /** Erzeugt Mesh + Slot-Entities für das Gebäude mit dem gegebenen Index. */
@@ -144,6 +152,18 @@ export class World {
     this.cullGrass();
   }
 
+  /** Baut die Teich-Modelle aus dem Zustand neu auf (bei Erweiterung/Neuaufbau). */
+  rebuildPonds(): void {
+    this.pondGroup.clear();
+    for (const p of this.state.ponds) {
+      const model = this.models.getPond();
+      if (!model) break; // kein Modell geladen → keine Teiche
+      model.position.set(p.x, POND_Y, p.z);
+      this.pondGroup.add(model);
+    }
+    this.cullGrass();
+  }
+
   /** Blendet Gras + Bäume unter Gebäuden/Straßen aus (und anderswo wieder ein). */
   cullGrass(): void {
     const occ = (x: number, z: number, r: number): boolean => this.isOccupied(x, z, r);
@@ -176,6 +196,11 @@ export class World {
       const hw = (rotated ? def.depth : def.width) / 2 + GRASS_BUILD_MARGIN + r;
       const hd = (rotated ? def.width : def.depth) / 2 + GRASS_BUILD_MARGIN + r;
       if (Math.abs(x - b.x) <= hw && Math.abs(z - b.z) <= hd) return true;
+    }
+
+    // Teiche (kreisförmig): kein Gras/Baum im Wasser.
+    for (const p of this.state.ponds) {
+      if (Math.hypot(x - p.x, z - p.z) <= POND_RADIUS + r) return true;
     }
     return false;
   }

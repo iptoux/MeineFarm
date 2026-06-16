@@ -13,6 +13,7 @@ import { PlacementController } from "../scene/PlacementController";
 import { RoadController } from "../scene/RoadController";
 import { FieldExpansion } from "../scene/FieldExpansion";
 import { CritterManager } from "../scene/Critters";
+import { BirdManager } from "../scene/Birds";
 
 import { GameState } from "./GameState";
 import { getBuilding } from "./config/buildings";
@@ -69,6 +70,7 @@ export class GameSession {
   private fieldMenu: FieldMenu;
   private ambient: AmbientAnimals;
   private critters: CritterManager;
+  private birds: BirdManager;
   private abort = new AbortController();
   private stopAutosave: () => void;
 
@@ -269,6 +271,7 @@ export class GameSession {
 
     this.ambient = new AmbientAnimals(this.state, audio);
     this.critters = new CritterManager(sceneManager.scene, this.state, models);
+    this.birds = new BirdManager(sceneManager.scene, this.state, models);
 
     this.stopAutosave = SaveManager.startAutosave(this.state, saveId);
 
@@ -282,6 +285,7 @@ export class GameSession {
     this.rig.ground.resize(f);
     this.rig.grass.rebuildForField(f);
     this.rig.trees.rebuildForField(f);
+    this.world.rebuildPonds(); // neue Teiche (z.B. nach Erweiterung) darstellen
     this.world.cullGrass(); // Belegung nach Gras-/Baum-Rebuild neu anwenden
     this.rig.clouds.setBounds(f);
     this.fieldExpansion.reposition(f);
@@ -297,6 +301,7 @@ export class GameSession {
     this.world.update(dt, tSec);
     this.ambient.update(dt);
     this.critters.update(dt);
+    this.birds.update(dt);
   }
 
   /** Baut das Spiel sauber ab: speichert, hängt Listener ab, räumt die Szene auf. */
@@ -315,6 +320,7 @@ export class GameSession {
     this.sellDialog.close();
     this.abort.abort();
     this.critters.dispose();
+    this.birds.dispose();
     this.world.dispose();
   }
 }

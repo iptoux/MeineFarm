@@ -42,6 +42,13 @@ export const WEATHER_GROWTH_FACTOR: Record<WeatherKind, number> = {
 /** Neutraler Wetterfaktor (Offline-Fortschritt, fehlende Daten). */
 export const NEUTRAL_WEATHER_FACTOR = WEATHER_GROWTH_FACTOR.clear;
 
+/** Deckel des Ernteverlusts durch Vögel (0..1 → max. Anteil, der wegfressen werden kann). */
+export const MAX_PEST_DAMAGE = 0.4;
+/** Schutzradius einer Vogelscheuche um ihr Zentrum (Welt-Einheiten). */
+export const SCARECROW_RADIUS = 12;
+/** Geschwindigkeit, mit der ein pickender Vogel Ernteschaden aufbaut (Anteil pro Sekunde). */
+export const PECK_DAMAGE_PER_SEC = 0.06;
+
 /** Rechnet einen gemittelten Wetterfaktor [0..1] in einen ganzzahligen Ertrag [4..10] um. */
 export function yieldFromWeather(avgFactor: number): number {
   const f = Math.min(Math.max(avgFactor, 0), 1);

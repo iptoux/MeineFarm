@@ -41,6 +41,8 @@ function sanitizeFieldGrowth(f: FieldGrowth | undefined): FieldGrowth {
     progress: typeof f.progress === "number" && f.progress >= 0 ? f.progress : 0,
     weatherSum: typeof f.weatherSum === "number" && f.weatherSum >= 0 ? f.weatherSum : 0,
     weatherTime: typeof f.weatherTime === "number" && f.weatherTime >= 0 ? f.weatherTime : 0,
+    pestDamage:
+      typeof f.pestDamage === "number" ? Math.min(1, Math.max(0, f.pestDamage)) : 0,
   };
 }
 
@@ -166,6 +168,20 @@ export class SaveManager {
     state.roads = Array.isArray(data.roads)
       ? data.roads.map((r) => ({ gx: r.gx, gz: r.gz, type: r.type ?? "strasse" }))
       : [];
+
+    // Teiche: vorhandene übernehmen, Alt-Stände (kein `ponds`) bekommen genau einen.
+    if (Array.isArray(data.ponds)) {
+      state.ponds = data.ponds
+        .filter((p) => p && typeof p.x === "number" && typeof p.z === "number")
+        .map((p) => ({ x: p.x, z: p.z }));
+      state.expansionsSincePond = typeof data.expansionsSincePond === "number" ? data.expansionsSincePond : 0;
+      if (typeof data.nextPondAfter === "number" && data.nextPondAfter > 0) {
+        state.nextPondAfter = data.nextPondAfter;
+      }
+    } else {
+      state.ponds = [];
+      state.seedInitialPond();
+    }
 
     const elapsedSec = Math.max(0, (Date.now() - (data.lastSaveTs ?? Date.now())) / 1000);
     if (elapsedSec > 0) {

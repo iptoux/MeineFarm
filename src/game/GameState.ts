@@ -3,6 +3,8 @@ import { getBuilding } from "./config/buildings";
 import {
   GROW_TO_GROWING_SEC,
   GROW_TO_READY_SEC,
+  MAX_PEST_DAMAGE,
+  PECK_DAMAGE_PER_SEC,
   yieldFromWeather,
   type FieldStateName,
 } from "./config/fields";
@@ -37,6 +39,8 @@ export interface FieldGrowth {
   weatherSum: number;
   /** Vergangene Wachstumszeit in Sekunden (Nenner für den Wetter-Durchschnitt). */
   weatherTime: number;
+  /** Von Vögeln angerichteter Ernteschaden (0..1); mindert den Ertrag beim Ernten. */
+  pestDamage: number;
 }
 
 export interface PlacedBuilding {
@@ -51,7 +55,7 @@ export interface PlacedBuilding {
 
 /** Frischer Feld-Zustand (Bau-Phase, alles auf null). */
 export function freshFieldGrowth(): FieldGrowth {
-  return { state: "dirt", progress: 0, weatherSum: 0, weatherTime: 0 };
+  return { state: "dirt", progress: 0, weatherSum: 0, weatherTime: 0, pestDamage: 0 };
 }
 
 /** Dekorative Straßen-Kachel (Gitterzelle + Typ). */
@@ -61,6 +65,15 @@ export interface RoadTile {
   /** Straßentyp-ID (z.B. "strasse", "feldweg"). */
   type: string;
 }
+
+/** Dekorativer Teich (Weltposition). */
+export interface PondTile {
+  x: number;
+  z: number;
+}
+
+/** Footprint-Radius eines Teichs (Platzierungsabstand + Gras-/Baum-Aussparung). */
+export const POND_RADIUS = 4;
 
 export interface SaveData {
   version: 3;
@@ -72,6 +85,12 @@ export interface SaveData {
   field: FieldBounds;
   /** Gesammelte Kürbisse (seit Feld-Feature; bei alten Ständen fehlt es → 0). */
   pumpkins?: number;
+  /** Dekorative Teiche (seit Teich-Feature; fehlt bei alten Ständen → 1 wird erzeugt). */
+  ponds?: PondTile[];
+  /** Erweiterungen seit dem letzten Teich. */
+  expansionsSincePond?: number;
+  /** Nach so vielen Erweiterungen kommt der nächste Teich (2–3). */
+  nextPondAfter?: number;
   /** Tageszeit [0,1) zum Speicherzeitpunkt. */
   timeOfDay: number;
   /** Wetterlage zum Speicherzeitpunkt ("clear" | "rain" | "storm" | "fog"). */
@@ -87,6 +106,11 @@ function makeSlot(unlocked = false, animalId: string | null = null): SlotState {
   return { unlocked, animalId, pending: 0 };
 }
 
+/** Ganzzahliger Zufall in [min, max]. */
+function randInt(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
 /**
  * Zentraler Spielzustand: Geld, platzierte Gebäude (mit ihren Slots) und
  * dekorative Straßen. Slots liegen flach; Gebäude i besitzt die Indizes
@@ -100,6 +124,11 @@ export class GameState {
   buildings: PlacedBuilding[] = [];
   slots: SlotState[] = [];
   roads: RoadTile[] = [];
+  /** Dekorative Teiche (zufällig platziert; persistiert). */
+  ponds: PondTile[] = [];
+  /** Erweiterungen seit dem letzten Teich + Schwelle (2–3) für den nächsten. */
+  expansionsSincePond = 0;
+  nextPondAfter = randInt(2, 3);
   /** Erweiterbares Spielfeld (siehe config/chunks). */
   field: FieldBounds = { ...INITIAL_FIELD };
   /** Tageszeit + Wetter (vom Rig pro Frame gespiegelt, damit sie mitgespeichert werden). */
@@ -125,10 +154,57 @@ export class GameState {
     );
     this.roads = [];
     this.field = { ...INITIAL_FIELD };
+    this.ponds = [];
+    this.expansionsSincePond = 0;
+    this.nextPondAfter = randInt(2, 3);
+    this.tryPlacePond(INITIAL_FIELD); // genau ein Teich zum Start
     this.timeOfDay = 0.32;
     this.weather = "clear";
     this.dogName = randomDogName();
     this.emit();
+  }
+
+  /**
+   * Versucht, einen Teich an einer freien Zufallsposition im Bereich `area` zu
+   * platzieren (vollständig drin, abseits von Gebäuden und anderen Teichen). Gibt
+   * true bei Erfolg zurück.
+   */
+  private tryPlacePond(area: FieldBounds): boolean {
+    const r = POND_RADIUS;
+    const minX = area.minX + r;
+    const maxX = area.maxX - r;
+    const minZ = area.minZ + r;
+    const maxZ = area.maxZ - r;
+    if (maxX <= minX || maxZ <= minZ) return false; // Bereich zu schmal
+    for (let i = 0; i < 30; i++) {
+      const x = minX + Math.random() * (maxX - minX);
+      const z = minZ + Math.random() * (maxZ - minZ);
+      if (this.pondBlocked(x, z, r)) continue;
+      this.ponds.push({ x, z });
+      return true;
+    }
+    return false;
+  }
+
+  /** Überlappt ein Teich-Kreis (x/z, Radius r) ein Gebäude oder einen anderen Teich? */
+  private pondBlocked(x: number, z: number, r: number): boolean {
+    for (const b of this.buildings) {
+      const def = getBuilding(b.defId);
+      if (!def) continue;
+      const rotated = Math.abs(Math.sin(b.rotation)) > 0.5;
+      const hw = (rotated ? def.depth : def.width) / 2 + r;
+      const hd = (rotated ? def.width : def.depth) / 2 + r;
+      if (Math.abs(x - b.x) <= hw && Math.abs(z - b.z) <= hd) return true;
+    }
+    for (const p of this.ponds) {
+      if (Math.hypot(x - p.x, z - p.z) < r * 2.5) return true;
+    }
+    return false;
+  }
+
+  /** Platziert genau einen Teich, falls noch keiner existiert (z.B. Alt-Stände beim Laden). */
+  seedInitialPond(): void {
+    if (this.ponds.length === 0) this.tryPlacePond(this.field);
   }
 
   /** Setzt den Hundenamen (getrimmt; leer → unverändert). */
@@ -165,10 +241,31 @@ export class GameState {
     const cost = this.expandCost(edge);
     if (cost === null || !this.canAfford(cost)) return false;
     this.money -= cost;
-    if (edge === "maxX") this.field.maxX += CHUNK;
-    else if (edge === "minX") this.field.minX -= CHUNK;
-    else if (edge === "maxZ") this.field.maxZ += CHUNK;
-    else this.field.minZ -= CHUNK;
+    const f = this.field;
+    // Neu hinzukommender Streifen (für eine mögliche Teich-Platzierung) vor der Mutation.
+    let strip: FieldBounds;
+    if (edge === "maxX") {
+      strip = { minX: f.maxX, maxX: f.maxX + CHUNK, minZ: f.minZ, maxZ: f.maxZ };
+      f.maxX += CHUNK;
+    } else if (edge === "minX") {
+      strip = { minX: f.minX - CHUNK, maxX: f.minX, minZ: f.minZ, maxZ: f.maxZ };
+      f.minX -= CHUNK;
+    } else if (edge === "maxZ") {
+      strip = { minX: f.minX, maxX: f.maxX, minZ: f.maxZ, maxZ: f.maxZ + CHUNK };
+      f.maxZ += CHUNK;
+    } else {
+      strip = { minX: f.minX, maxX: f.maxX, minZ: f.minZ - CHUNK, maxZ: f.minZ };
+      f.minZ -= CHUNK;
+    }
+
+    // Nach 2–3 Erweiterungen einen weiteren Teich auf der neuen Fläche platzieren.
+    this.expansionsSincePond++;
+    if (this.expansionsSincePond >= this.nextPondAfter) {
+      this.tryPlacePond(strip);
+      this.expansionsSincePond = 0;
+      this.nextPondAfter = randInt(2, 3);
+    }
+
     this.emit();
     return true;
   }
@@ -319,16 +416,24 @@ export class GameState {
     }
   }
 
+  /** Lässt einen Vogel am Feld picken: baut Ernteschaden auf (gedeckelt). Kein emit (pro Frame). */
+  peckField(b: PlacedBuilding, dtSec: number): void {
+    const f = b.field;
+    if (!f || dtSec <= 0) return;
+    f.pestDamage = Math.min(MAX_PEST_DAMAGE, f.pestDamage + PECK_DAMAGE_PER_SEC * dtSec);
+  }
+
   /**
    * Erntet ein reifes Feld: schreibt 4–10 Kürbisse gut (je nach Wetter über den
-   * Wachstumszeitraum) und startet den Zyklus neu bei „Bau". Gibt die Menge zurück (0 falls nicht reif).
+   * Wachstumszeitraum, abzüglich Vogel-Ernteschaden) und startet den Zyklus neu bei „Bau".
+   * Gibt die Menge zurück (0 falls nicht reif).
    */
   harvestField(buildingIndex: number): number {
     const b = this.buildings[buildingIndex];
     const f = b?.field;
     if (!f || f.state !== "ready") return 0;
     const avg = f.weatherTime > 0 ? f.weatherSum / f.weatherTime : 0.7;
-    const gained = yieldFromWeather(avg);
+    const gained = Math.max(0, Math.round(yieldFromWeather(avg) * (1 - f.pestDamage)));
     this.pumpkins += gained;
     b.field = freshFieldGrowth();
     this.emit();
@@ -400,6 +505,9 @@ export class GameState {
       buildings: this.buildings,
       slots: this.slots,
       roads: this.roads,
+      ponds: this.ponds,
+      expansionsSincePond: this.expansionsSincePond,
+      nextPondAfter: this.nextPondAfter,
       field: this.field,
       timeOfDay: this.timeOfDay,
       weather: this.weather,

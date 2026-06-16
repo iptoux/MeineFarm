@@ -203,6 +203,11 @@ export class WeatherManager {
 
   private rollNewDay(): void {
     const start = this.schedule.end; // gestern → heute, nahtlos
+    // Nach einem Gewitter klart es immer auf: kein Regen/Nebel/Sturm direkt danach.
+    if (start === "storm") {
+      this.schedule = { start, end: "clear", changeAt: THREE.MathUtils.randFloat(0.3, 0.7) };
+      return;
+    }
     if (Math.random() < CHANGE_CHANCE) {
       const end = weightedPick(start);
       const changeAt = THREE.MathUtils.randFloat(0.3, 0.7);
