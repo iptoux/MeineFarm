@@ -1,5 +1,10 @@
+import * as THREE from "three";
+
 /**
- * Audio: Hintergrundmusik (Loop) + Effekt-Sounds.
+ * Audio: Hintergrundmusik (Loop) + Effekt-Sounds (global, HTMLAudio) sowie das
+ * Fundament für räumliches Spatial-Audio: hält den Listener (an der Kamera), lädt und
+ * cached AudioBuffer (für THREE.PositionalAudio) und schaltet beim Stummschalten auch
+ * die positionalen Quellen über die Listener-Lautstärke ab.
  * Browser blockieren Autoplay bis zur ersten Nutzergeste → Musik startet erst
  * nach dem ersten Klick/Tastendruck. Stummschalten per toggleMute().
  */
@@ -14,8 +19,6 @@ interface WeatherLoop {
 
 export class AudioManager {
   private music: HTMLAudioElement;
-  /** Leise Bauernhof-Geräuschkulisse, läuft zusätzlich zur Musik im Loop. */
-  private ambience: HTMLAudioElement;
   /** Wetter-Schleifen (Regen, Sturm/Wind), lautstärkegeregelt nach Wetterstärke. */
   private weatherLoops: WeatherLoop[];
   private rainLoop: WeatherLoop;
@@ -23,14 +26,14 @@ export class AudioManager {
   private muted = false;
   private unlocked = false;
 
-  constructor() {
+  /** Geladene AudioBuffer für positionale Quellen (Schlüssel = Pfad ohne `/sounds/`). */
+  private buffers = new Map<string, AudioBuffer>();
+  private audioLoader = new THREE.AudioLoader();
+
+  constructor(private listener: THREE.AudioListener) {
     this.music = new Audio("/sounds/farm-music.mp3");
     this.music.loop = true;
     this.music.volume = 0.3;
-
-    this.ambience = new Audio("/sounds/farm-ambience.mp3");
-    this.ambience.loop = true;
-    this.ambience.volume = 0.18;
 
     this.rainLoop = this.makeWeatherLoop("rain.mp3", 0.45);
     this.stormLoop = this.makeWeatherLoop("storm.mp3", 0.5);
@@ -38,9 +41,10 @@ export class AudioManager {
 
     const unlock = () => {
       this.unlocked = true;
+      // Web-Audio-Kontext des Listeners freischalten (für PositionalAudio).
+      void this.listener.context.resume().catch(() => {});
       if (!this.muted) {
         void this.music.play().catch(() => {});
-        void this.ambience.play().catch(() => {});
       }
       this.refreshWeatherLoops();
       window.removeEventListener("pointerdown", unlock);
@@ -48,6 +52,35 @@ export class AudioManager {
     };
     window.addEventListener("pointerdown", unlock);
     window.addEventListener("keydown", unlock);
+  }
+
+  /**
+   * Lädt die AudioBuffer für positionale Quellen vor (Hof-Kulisse + Tierrufe +
+   * Teich/Frosch). Fehlende Dateien werden still übersprungen – die jeweilige Quelle
+   * bleibt dann einfach lautlos. Spiegelt das parallele Lade-Muster aus `AnimalModels.load()`.
+   */
+  async load(): Promise<void> {
+    const files = ["farm-ambience.mp3", "animals/huhn.mp3", "animals/kuh.mp3", "animals/pferd.mp3", "animals/schaf.mp3", "animals/schwein.mp3", "pond-water.mp3", "frog.mp3"];
+    await Promise.all(
+      files.map(async (file) => {
+        try {
+          const buf = await this.audioLoader.loadAsync(`/sounds/${file}`);
+          this.buffers.set(file, buf);
+        } catch {
+          // Datei fehlt/lädt nicht → Quelle bleibt lautlos.
+        }
+      }),
+    );
+  }
+
+  /** Geladener AudioBuffer für eine positionale Quelle; null, wenn nicht vorhanden. */
+  buffer(file: string): AudioBuffer | null {
+    return this.buffers.get(file) ?? null;
+  }
+
+  /** Ob die erste Nutzergeste erfolgt ist (Autoplay/Web-Audio freigeschaltet). */
+  get isUnlocked(): boolean {
+    return this.unlocked;
   }
 
   private makeWeatherLoop(file: string, maxVol: number): WeatherLoop {
@@ -125,12 +158,12 @@ export class AudioManager {
   /** Schaltet Ton an/aus; gibt den neuen Mute-Zustand zurück. */
   toggleMute(): boolean {
     this.muted = !this.muted;
+    // Positionale Quellen (PositionalAudio) hängen am Listener-Master.
+    this.listener.setMasterVolume(this.muted ? 0 : 1);
     if (this.muted) {
       this.music.pause();
-      this.ambience.pause();
     } else if (this.unlocked) {
       void this.music.play().catch(() => {});
-      void this.ambience.play().catch(() => {});
     }
     this.refreshWeatherLoops();
     return this.muted;

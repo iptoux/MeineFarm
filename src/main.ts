@@ -66,7 +66,8 @@ async function init(): Promise<void> {
   await models.load();
 
   const coinBurst = new CoinBurst(sceneManager.scene);
-  const audio = new AudioManager();
+  const audio = new AudioManager(sceneManager.listener);
+  await audio.load(); // AudioBuffer für positionale Quellen vorladen
   const dayNight = new DayNightHud();
 
   // Wetter: Regen-Partikel + Wettersteuerung (moduliert Licht/Fog/Wolken)

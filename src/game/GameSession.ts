@@ -31,7 +31,7 @@ import { SellDialog } from "../ui/SellDialog";
 import { floatMoney, floatPumpkins } from "../ui/Effects";
 
 import { AudioManager } from "../audio/AudioManager";
-import { AmbientAnimals } from "../audio/AmbientAnimals";
+import { SpatialAmbience } from "../audio/SpatialAmbience";
 import { SaveManager } from "../storage/SaveManager";
 
 /** Persistente Infrastruktur, die über alle Spielstände hinweg bestehen bleibt. */
@@ -68,7 +68,7 @@ export class GameSession {
   private roadController: RoadController;
   private fieldExpansion: FieldExpansion;
   private fieldMenu: FieldMenu;
-  private ambient: AmbientAnimals;
+  private ambient: SpatialAmbience;
   private critters: CritterManager;
   private birds: BirdManager;
   private abort = new AbortController();
@@ -269,7 +269,7 @@ export class GameSession {
       signal,
     );
 
-    this.ambient = new AmbientAnimals(this.state, audio);
+    this.ambient = new SpatialAmbience(sceneManager.scene, this.state, audio, sceneManager.listener);
     this.critters = new CritterManager(sceneManager.scene, this.state, models);
     this.birds = new BirdManager(sceneManager.scene, this.state, models);
 
@@ -319,6 +319,7 @@ export class GameSession {
     this.marketMenu.close();
     this.sellDialog.close();
     this.abort.abort();
+    this.ambient.dispose();
     this.critters.dispose();
     this.birds.dispose();
     this.world.dispose();

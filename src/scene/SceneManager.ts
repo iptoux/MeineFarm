@@ -14,6 +14,8 @@ export class SceneManager {
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
   readonly controls: OrbitControls;
+  /** Audio-Listener (hängt an der Kamera) für räumliches Spatial-Audio. */
+  readonly listener = new THREE.AudioListener();
 
   /** Lichter werden vom SkyManager pro Frame an die Tageszeit angepasst. */
   readonly hemi!: THREE.HemisphereLight;
@@ -48,6 +50,8 @@ export class SceneManager {
 
     this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
     this.camera.position.set(9, 6, 14);
+    // Listener an die Kamera hängen → Panner-Positionen folgen automatisch dem Blick.
+    this.camera.add(this.listener);
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));

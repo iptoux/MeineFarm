@@ -15,6 +15,8 @@ Attribution erforderlich).
 - `animals/schaf.mp3` — „Sheep sounds" (SFX #1741) — Schaf-Ruf
 - `animals/kuh.mp3` — „Cow single moo" (SFX #1747) — Kuh-Ruf
 - `animals/pferd.mp3` — „Stallion horse neigh" (SFX #1762) — Pferd-Ruf
+- `pond-water.mp3` — „Water flowing ambience loop" (SFX #3126) — Teich-Wasser (positional, Loop)
+- `frog.mp3` — „Forest ambience with croaking frogs" (SFX #1241) — Frosch-Chor am Teich (positional, Loop)
 - `rain.mp3` — „Rain long loop" (SFX #2394) — Regen-Geräuschkulisse (Loop)
 - `storm.mp3` — „Storm wind" (SFX #2411) — Sturm/Wind beim Gewitter (Loop)
 - `thunder.mp3` — „Strong close thunder explosion" (SFX #1300) — Donnerschlag
