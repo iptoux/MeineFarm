@@ -18,7 +18,8 @@ const DAY_FRACTION = 2 / 3;
 const MAX_ELEVATION = 60;
 const SKY_RADIUS = 1400;
 const SKYBOX_URL = "/skybox/farm-lowpoly/panorama.png";
-const HORIZON_RADIUS = 230;
+const HORIZON_RADIUS = 360;
+const SKY_CLOUD_RADIUS = 470;
 
 const FOG_DAY = new THREE.Color(0x9fc9e8);
 const FOG_NIGHT = new THREE.Color(0x0b1626);
@@ -46,6 +47,8 @@ export class SkyManager {
   private readonly skyMat: THREE.MeshBasicMaterial;
   private readonly sky: THREE.Mesh;
   private readonly horizon: THREE.Group;
+  private readonly skyClouds: THREE.Group;
+  private readonly skyCloudMats: THREE.MeshBasicMaterial[];
   private readonly stars: THREE.Points;
   private readonly starMat: THREE.PointsMaterial;
   private readonly sunVec = new THREE.Vector3();
@@ -73,6 +76,11 @@ export class SkyManager {
     this.horizon = makeDistantHorizon(HORIZON_RADIUS);
     scene.add(this.horizon);
 
+    const clouds = makeSkyboxClouds(SKY_CLOUD_RADIUS);
+    this.skyClouds = clouds.group;
+    this.skyCloudMats = clouds.materials;
+    scene.add(this.skyClouds);
+
     this.starMat = new THREE.PointsMaterial({
       color: 0xfdfdff,
       size: 2.6,
@@ -90,6 +98,7 @@ export class SkyManager {
     this.sky.onBeforeRender = (_renderer, _scene, camera) => {
       this.sky.position.copy(camera.position);
       this.stars.position.copy(camera.position);
+      this.skyClouds.position.copy(camera.position);
       this.horizon.position.set(camera.position.x, 0, camera.position.z);
     };
 
@@ -170,6 +179,14 @@ export class SkyManager {
     this.skyTint.lerp(SKY_TINT_DUSK, this.dusk * 0.22);
     this.skyTint.lerp(SKY_TINT_OVERCAST, this.overcast * 0.45);
     this.skyMat.color.copy(this.skyTint);
+    this.horizon.visible = this.daylight > 0.05 || this.dusk > 0.15;
+    this.skyClouds.visible = this.horizon.visible;
+    for (const mat of this.skyCloudMats) {
+      mat.color.copy(SKY_TINT_NIGHT).lerp(new THREE.Color(0xfff1d2), this.daylight);
+      mat.color.lerp(SKY_TINT_DUSK, this.dusk * 0.18);
+      mat.color.lerp(SKY_TINT_OVERCAST, this.overcast * 0.35);
+      mat.opacity = THREE.MathUtils.lerp(0.2, 0.82, this.daylight) * (1 - this.overcast * 0.25);
+    }
   }
 }
 
@@ -177,33 +194,94 @@ function makeDistantHorizon(radius: number): THREE.Group {
   const group = new THREE.Group();
   group.renderOrder = -900;
 
-  const mountainBack = new THREE.MeshBasicMaterial({ color: 0xa8a1bd, fog: false, side: THREE.DoubleSide });
-  const mountainFront = new THREE.MeshBasicMaterial({ color: 0xbfae8b, fog: false, side: THREE.DoubleSide });
-  const hillMat = new THREE.MeshBasicMaterial({ color: 0x82a35d, fog: false, side: THREE.DoubleSide });
-
-  for (let i = 0; i < 28; i++) {
-    const a = (i / 28) * Math.PI * 2;
-    const width = THREE.MathUtils.degToRad(10 + ((i * 17) % 9));
-    const height = 15 + ((i * 11) % 10);
-    const base = 2.0 + ((i * 5) % 4) * 0.35;
+  const mountainBack = new THREE.MeshBasicMaterial({
+    color: 0x948daa,
+    depthWrite: false,
+    fog: false,
+    opacity: 0.78,
+    side: THREE.DoubleSide,
+    transparent: true,
+  });
+  const mountainFront = new THREE.MeshBasicMaterial({
+    color: 0xa99470,
+    depthWrite: false,
+    fog: false,
+    opacity: 0.72,
+    side: THREE.DoubleSide,
+    transparent: true,
+  });
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const width = THREE.MathUtils.degToRad(8 + ((i * 17) % 7));
+    const height = 5.2 + ((i * 11) % 5) * 0.7;
+    const base = -7.8 + ((i * 5) % 4) * 0.2;
     group.add(makeHorizonTriangle(radius, a, width, base, height, mountainBack, -8));
   }
 
-  for (let i = 0; i < 22; i++) {
-    const a = ((i + 0.35) / 22) * Math.PI * 2;
-    const width = THREE.MathUtils.degToRad(14 + ((i * 13) % 10));
-    const height = 8 + ((i * 7) % 6);
-    group.add(makeHorizonTriangle(radius * 0.93, a, width, 1.0, height, mountainFront, -6));
-  }
-
-  for (let i = 0; i < 18; i++) {
-    const a = ((i + 0.15) / 18) * Math.PI * 2;
-    const width = THREE.MathUtils.degToRad(22 + ((i * 19) % 14));
-    const height = 4.6 + ((i * 3) % 4) * 0.7;
-    group.add(makeHorizonTriangle(radius * 0.84, a, width, 0.3, height, hillMat, -4));
+  for (let i = 0; i < 20; i++) {
+    const a = ((i + 0.35) / 20) * Math.PI * 2;
+    const width = THREE.MathUtils.degToRad(12 + ((i * 13) % 9));
+    const height = 2.6 + ((i * 7) % 5) * 0.4;
+    group.add(makeHorizonTriangle(radius * 0.94, a, width, -5.4, height, mountainFront, -6));
   }
 
   return group;
+}
+
+function makeSkyboxClouds(radius: number): { group: THREE.Group; materials: THREE.MeshBasicMaterial[] } {
+  const group = new THREE.Group();
+  group.renderOrder = -960;
+  const materials: THREE.MeshBasicMaterial[] = [];
+  const specs = [
+    { a: 0.08, y: 68, w: 46, h: 12 },
+    { a: 0.22, y: 112, w: 72, h: 18 },
+    { a: 0.36, y: 82, w: 58, h: 14 },
+    { a: 0.51, y: 128, w: 50, h: 11 },
+    { a: 0.64, y: 92, w: 76, h: 17 },
+    { a: 0.79, y: 118, w: 60, h: 15 },
+    { a: 0.91, y: 72, w: 54, h: 13 },
+  ];
+
+  for (let i = 0; i < specs.length; i++) {
+    const s = specs[i];
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xfff1d2,
+      depthWrite: false,
+      fog: false,
+      opacity: 0.78,
+      side: THREE.DoubleSide,
+      transparent: true,
+    });
+    materials.push(mat);
+    const cloud = makeLowPolyCloud(s.w, s.h, mat);
+    const angle = s.a * Math.PI * 2;
+    cloud.position.set(Math.sin(angle) * radius, s.y, Math.cos(angle) * radius);
+    cloud.lookAt(0, s.y, 0);
+    cloud.rotateZ((i % 2 === 0 ? -1 : 1) * THREE.MathUtils.degToRad(2 + (i % 3)));
+    cloud.frustumCulled = false;
+    cloud.renderOrder = -960;
+    group.add(cloud);
+  }
+
+  return { group, materials };
+}
+
+function makeLowPolyCloud(width: number, height: number, material: THREE.Material): THREE.Mesh {
+  const hw = width / 2;
+  const hh = height / 2;
+  const points = [
+    new THREE.Vector2(-hw, -hh * 0.2),
+    new THREE.Vector2(-hw * 0.82, hh * 0.55),
+    new THREE.Vector2(-hw * 0.48, hh * 0.95),
+    new THREE.Vector2(-hw * 0.15, hh * 0.62),
+    new THREE.Vector2(hw * 0.12, hh),
+    new THREE.Vector2(hw * 0.48, hh * 0.72),
+    new THREE.Vector2(hw * 0.86, hh * 0.35),
+    new THREE.Vector2(hw, -hh * 0.15),
+    new THREE.Vector2(hw * 0.38, -hh * 0.52),
+    new THREE.Vector2(-hw * 0.28, -hh * 0.45),
+  ];
+  return new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(points)), material);
 }
 
 function makeHorizonTriangle(

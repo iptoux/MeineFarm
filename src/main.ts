@@ -36,7 +36,7 @@ async function init(): Promise<void> {
   // --- Persistentes Rig: bleibt über alle Spielstände hinweg bestehen ---
   const sceneManager = new SceneManager(canvas);
   const ground = new Ground();
-  sceneManager.scene.add(ground.mesh);
+  sceneManager.scene.add(ground.object);
 
   // Dynamischer Himmel + Tag/Nacht-Zyklus (steuert die Szenen-Lichter)
   const sky = new SkyManager(
