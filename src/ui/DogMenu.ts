@@ -16,7 +16,6 @@ export interface DogMenuHandlers {
 export class DogMenu {
   private el: HTMLElement;
   private isOpen = false;
-  private lastScreen = { x: 0, y: 0 };
 
   constructor(
     private state: GameState,
@@ -41,8 +40,7 @@ export class DogMenu {
     this.handlers.onClose();
   }
 
-  openForDog(screen: { x: number; y: number }): void {
-    this.lastScreen = screen;
+  openForDog(): void {
     this.isOpen = true;
     this.render();
   }
@@ -95,13 +93,19 @@ export class DogMenu {
     input.select();
   }
 
-  /** Sichtbar machen + im Viewport positionieren. */
+  /**
+   * Sichtbar machen + positionieren. Da die Kamera auf den Hund (Bildmitte) fährt,
+   * legen wir das Menü links der Mitte und vertikal zentriert ab — so verdeckt es
+   * den Hund nicht.
+   */
   private show(): void {
     this.el.classList.remove("hidden");
     const w = this.el.offsetWidth;
     const h = this.el.offsetHeight;
-    this.el.style.left = `${Math.min(this.lastScreen.x, window.innerWidth - w - 8)}px`;
-    this.el.style.top = `${Math.min(this.lastScreen.y, window.innerHeight - h - 8)}px`;
+    const x = Math.max(16, window.innerWidth * 0.5 - w - 48);
+    const y = Math.max(16, Math.min(window.innerHeight * 0.5 - h / 2, window.innerHeight - h - 16));
+    this.el.style.left = `${x}px`;
+    this.el.style.top = `${y}px`;
   }
 
   private makeTitle(text: string): HTMLElement {

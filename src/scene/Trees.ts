@@ -212,6 +212,16 @@ export async function createTrees(): Promise<Trees> {
 
   const bark = barkMat ?? new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 1 });
   const leaves = leavesMat ?? new THREE.MeshStandardMaterial({ color: 0x3f7d3a, roughness: 1 });
+  // Modell-Materialien sind metallisch/glänzend (metalness 0.4, roughness 0.3) →
+  // erzeugt grelle Specular-„Glüh"-Flecken an Laub/Rinde. Bäume sind matt: kein
+  // Metall, hohe Rauheit.
+  for (const m of [bark, leaves]) {
+    if (m instanceof THREE.MeshStandardMaterial) {
+      m.metalness = 0;
+      m.roughness = 1;
+      m.emissive.setRGB(0, 0, 0);
+    }
+  }
   return new Trees(variants, bark, leaves);
 }
 

@@ -222,10 +222,10 @@ export class GameSession {
           this.animalMenu.openForSlot(index, screen);
         },
         onBuilding: (index, screen) => this.buildingMenu.openForBuilding(index, screen),
-        onDog: (screen) => {
-          const p = this.critters.selectDog();
+        onDog: () => {
+          const p = this.critters.selectDog(sceneManager.camera.position);
           if (p) sceneManager.focusOn(p);
-          this.dogMenu.openForDog(screen);
+          this.dogMenu.openForDog();
         },
       },
       () => this.placement.active || this.roadController.active,

@@ -48,10 +48,14 @@ export class CritterManager {
     return this.dog ? this.dog.pickMeshes() : [];
   }
 
-  /** Friert den Hund ein (Auswahl) und liefert seine Welt-Kopfposition (für die Kamera). */
-  selectDog(): THREE.Vector3 | null {
+  /**
+   * Friert den Hund ein (Auswahl), lässt ihn zur Kamera blicken und liefert seine
+   * Welt-Kopfposition (für die Kamerafahrt).
+   */
+  selectDog(cameraPos: THREE.Vector3): THREE.Vector3 | null {
     if (!this.dog) return null;
     this.dog.setSelected(true);
+    this.dog.faceTowards(cameraPos);
     return this.dog.headWorldPos();
   }
 
@@ -184,6 +188,8 @@ class Dog {
   private yCurrent = 0;
   /** Angeklickt/ausgewählt: Hund bleibt stehen, bis wieder deselektiert wird. */
   private selected = false;
+  /** Ziel-Blickrichtung (zur Kamera), solange ausgewählt; null = keine. */
+  private faceTarget: number | null = null;
   private pickMeshCache: THREE.Object3D[] | null = null;
 
   constructor(
@@ -222,8 +228,14 @@ class Dog {
       return;
     }
 
-    // Ausgewählt → eingefroren: nur die Idle-Animation läuft, kein Roaming.
-    if (this.selected) return;
+    // Ausgewählt → eingefroren: nur Idle, dabei sanft zur Kamera drehen.
+    if (this.selected) {
+      if (this.faceTarget !== null) {
+        this.heading = lerpAngle(this.heading, this.faceTarget, Math.min(1, dt * 6));
+        this.object.rotation.y = this.heading;
+      }
+      return;
+    }
 
     if (this.state === "pause") {
       this.pauseTimer -= dt;
@@ -264,9 +276,15 @@ class Dog {
         this.state = "pause";
         this.switchTo(this.idleAction());
       }
-    } else if (this.state !== "action") {
-      this.beginPause();
+    } else {
+      this.faceTarget = null;
+      if (this.state !== "action") this.beginPause();
     }
+  }
+
+  /** Lässt den Hund (sanft) zu einem Weltpunkt blicken (z.B. zur Kamera). */
+  faceTowards(point: THREE.Vector3): void {
+    this.faceTarget = Math.atan2(point.x - this.object.position.x, point.z - this.object.position.z);
   }
 
   feed(): void {

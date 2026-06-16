@@ -36,7 +36,7 @@ export class StartMenu {
 
     const title = document.createElement("h1");
     title.className = "sm-title";
-    title.textContent = "🐾 MeinHaustier";
+    title.textContent = "🐾 Mein Bauernhof";
     panel.appendChild(title);
 
     const subtitle = document.createElement("p");
