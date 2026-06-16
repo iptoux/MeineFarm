@@ -18,6 +18,10 @@ import type { Trees } from "./Trees";
 const GRASS_BUILD_MARGIN = 0.1;
 /** Höhe, auf der Teiche liegen (knapp über dem Boden, gegen Z-Fighting). */
 const POND_Y = 0.02;
+/** Radius der Wasserfläche im Steinring (etwas kleiner als der Footprint). */
+const WATER_RADIUS = POND_RADIUS - 0.6;
+/** Höhe der Wasseroberfläche im Becken. */
+const WATER_Y = 0.45;
 
 /**
  * Verwaltet die sichtbare Welt: Gebäude-Meshes + ihre Slot-Entities und die
@@ -35,6 +39,10 @@ export class World {
   private roadGeo = new THREE.BoxGeometry(ROAD_TILE, 0.08, ROAD_TILE);
   private roadMats = new Map<string, THREE.MeshStandardMaterial>();
   private pondGroup = new THREE.Group();
+  /** Geteilte Animations-Uniforms der Wasserflächen (uTime + Windstärke). */
+  private waterUniforms = { uTime: { value: 0 }, uWind: { value: 1 } };
+  private waterGeo = makeWaterGeometry(WATER_RADIUS);
+  private waterMat = makeWaterMaterial(this.waterUniforms);
   /** Dach-Platten zum Ausblenden beim Zoom — Array-Referenz bleibt stabil. */
   readonly roofMeshes: THREE.Mesh[] = [];
 
@@ -92,6 +100,8 @@ export class World {
     this.roadMats.clear();
     this.scene.remove(this.pondGroup);
     this.pondGroup.clear();
+    this.waterGeo.dispose();
+    this.waterMat.dispose();
   }
 
   /** Erzeugt Mesh + Slot-Entities für das Gebäude mit dem gegebenen Index. */
@@ -157,9 +167,15 @@ export class World {
     this.pondGroup.clear();
     for (const p of this.state.ponds) {
       const model = this.models.getPond();
-      if (!model) break; // kein Modell geladen → keine Teiche
-      model.position.set(p.x, POND_Y, p.z);
-      this.pondGroup.add(model);
+      if (model) {
+        model.position.set(p.x, POND_Y, p.z);
+        this.pondGroup.add(model);
+      }
+      // Animierte Wasserfläche im Becken (geteilte Geometrie + Material).
+      const water = new THREE.Mesh(this.waterGeo, this.waterMat);
+      water.position.set(p.x, WATER_Y, p.z);
+      water.renderOrder = 1;
+      this.pondGroup.add(water);
     }
     this.cullGrass();
   }
@@ -217,7 +233,10 @@ export class World {
   }
 
   /** Produktion akkumulieren und Darstellung aktualisieren. */
-  update(dt: number, tSec: number): void {
+  update(dt: number, tSec: number, windStrength = 1): void {
+    // Wasser-Animation (Wellen + Windreaktion).
+    this.waterUniforms.uTime.value = tSec;
+    this.waterUniforms.uWind.value = windStrength;
     for (let i = 0; i < this.entities.length; i++) {
       const slot = this.state.slots[i];
       const def = slot.animalId ? getAnimal(slot.animalId) : undefined;
@@ -257,4 +276,47 @@ export class World {
   animalClip(globalIndex: number): string | null {
     return this.entities[globalIndex]?.currentClip ?? null;
   }
+}
+
+/** Flach in der XZ-Ebene liegende Kreisscheibe (Wasseroberfläche). */
+function makeWaterGeometry(radius: number): THREE.CircleGeometry {
+  const geo = new THREE.CircleGeometry(radius, 40);
+  geo.rotateX(-Math.PI / 2); // in die XZ-Ebene legen (Normale +y)
+  return geo;
+}
+
+/**
+ * Stilisierte Low-Poly-Wasseroberfläche: leichte Wellen im Vertex-Shader (zeitlich
+ * animiert, Amplitude/Tempo steigen mit dem Wind), schimmernder Blauverlauf je nach
+ * Wellenhöhe. Halbtransparent. `uTime`/`uWind` werden pro Frame von `World.update` gesetzt.
+ */
+function makeWaterMaterial(uniforms: { uTime: { value: number }; uWind: { value: number } }): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    vertexShader: `
+      uniform float uTime;
+      uniform float uWind;
+      varying float vH;
+      void main() {
+        vec3 p = position;
+        float amp = 0.06 * (1.0 + uWind * 0.9);
+        float spd = 1.2 + uWind * 0.6;
+        float w = sin(p.x * 1.1 + uTime * spd) * amp + cos(p.z * 1.4 + uTime * spd * 0.8) * amp;
+        p.y += w;
+        vH = w / max(amp, 0.0001);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying float vH;
+      void main() {
+        vec3 deep = vec3(0.09, 0.32, 0.52);
+        vec3 shallow = vec3(0.24, 0.56, 0.78);
+        vec3 col = mix(deep, shallow, clamp(vH * 0.5 + 0.5, 0.0, 1.0));
+        gl_FragColor = vec4(col, 0.88);
+      }
+    `,
+  });
 }

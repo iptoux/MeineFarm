@@ -298,7 +298,7 @@ export class GameSession {
     // liest `state.weather` für den Ertrag; außerdem schreibt der Autosave beide mit.
     this.state.timeOfDay = this.rig.sky.timeOfDay;
     this.state.weather = this.rig.weather.target;
-    this.world.update(dt, tSec);
+    this.world.update(dt, tSec, this.rig.weather.windStrength);
     this.ambient.update(dt);
     this.critters.update(dt);
     this.birds.update(dt);
