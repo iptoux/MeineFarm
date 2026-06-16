@@ -17,11 +17,11 @@ import type { Trees } from "./Trees";
 /** Kleiner Zusatzabstand zur Gebäudewand (der Büschel-Radius wird separat addiert). */
 const GRASS_BUILD_MARGIN = 0.1;
 /** Höhe, auf der Teiche liegen (knapp über dem Boden, gegen Z-Fighting). */
-const POND_Y = 0.02;
+const POND_Y = 0.01;
 /** Radius der Wasserfläche im Steinring (etwas kleiner als der Footprint). */
 const WATER_RADIUS = POND_RADIUS - 2.0;
 /** Höhe der Wasseroberfläche im Becken. */
-const WATER_Y = 0.15;
+const WATER_Y = 0.18;
 
 /**
  * Verwaltet die sichtbare Welt: Gebäude-Meshes + ihre Slot-Entities und die
@@ -278,10 +278,15 @@ export class World {
   }
 }
 
-/** Flach in der XZ-Ebene liegende Kreisscheibe (Wasseroberfläche). */
+/** Streckung der Wasserfläche zur Ellipse (x = länger, z = etwas schmaler). */
+const WATER_OVAL_X = 1.60;
+const WATER_OVAL_Z = 1.15;
+
+/** Flach in der XZ-Ebene liegende, ovale Wasserfläche. */
 function makeWaterGeometry(radius: number): THREE.CircleGeometry {
   const geo = new THREE.CircleGeometry(radius, 40);
   geo.rotateX(-Math.PI / 2); // in die XZ-Ebene legen (Normale +y)
+  geo.scale(WATER_OVAL_X, 1, WATER_OVAL_Z); // rund → oval
   return geo;
 }
 
