@@ -25,6 +25,8 @@ export class CritterManager {
   private dog: Dog | null = null;
   private frogs: Frog[] = [];
   private frogTimer = randFloat(8, 20);
+  private pondFrogs: Frog[] = [];
+  private pondFrogTimer = randFloat(2, 5);
   private hearts: HeartBurst;
 
   constructor(
@@ -41,6 +43,7 @@ export class CritterManager {
     this.dog?.update(dt);
     this.hearts.update(dt);
     this.updateFrogs(dt);
+    this.updatePondFrogs(dt);
   }
 
   /** Anklickbare Meshes des Hundes (für den Picker). */
@@ -101,11 +104,36 @@ export class CritterManager {
     }
   }
 
+  /** Dauerhafte Frösche, die ein Teichufer umrunden (max. 2, koexistieren mit Straßen-Fröschen). */
+  private updatePondFrogs(dt: number): void {
+    for (let i = this.pondFrogs.length - 1; i >= 0; i--) {
+      if (this.pondFrogs[i].update(dt)) {
+        this.scene.remove(this.pondFrogs[i].object);
+        this.pondFrogs.splice(i, 1);
+      }
+    }
+
+    this.pondFrogTimer -= dt;
+    if (this.pondFrogTimer > 0) return;
+    this.pondFrogTimer = randFloat(2, 5);
+
+    if (this.pondFrogs.length >= 2 || this.state.ponds.length === 0) return;
+    const model = this.models.get("frog");
+    if (!model) return;
+    const frog = Frog.tryCreateNearPond(this.state, model, this.models.getClips("frog"));
+    if (frog) {
+      this.scene.add(frog.object);
+      this.pondFrogs.push(frog);
+    }
+  }
+
   dispose(): void {
     if (this.dog) this.scene.remove(this.dog.object);
     for (const f of this.frogs) this.scene.remove(f.object);
+    for (const f of this.pondFrogs) this.scene.remove(f.object);
     this.hearts.dispose();
     this.frogs = [];
+    this.pondFrogs = [];
     this.dog = null;
   }
 }
@@ -418,24 +446,41 @@ class Dog {
 // Frosch
 // ---------------------------------------------------------------------------
 
+/**
+ * Halbachsen der Ufer-Ellipse für Teich-Frösche: knapp außerhalb der ovalen
+ * Wasserfläche (Halbachsen ≈ 3.2/2.3, siehe World.ts), aber innerhalb des Steinrings
+ * (Footprint-Radius ≈ 4). Bei Bedarf visuell feinjustieren.
+ */
+const BANK_RX = 3.5;
+const BANK_RZ = 2.6;
+/** Wahrscheinlichkeit, dass ein Loop-Frosch an einem Wegpunkt die Richtung umkehrt. */
+const REVERSE_CHANCE = 0.2;
+/** Wahrscheinlichkeit für einen Satz quer über den Teich ans gegenüberliegende Ufer. */
+const CROSS_CHANCE = 0.15;
+
 class Frog {
   private hopFrom = new THREE.Vector2();
   private hopTo = new THREE.Vector2();
   private hopT = 1;
   private hopDur = 0.5;
+  private hopPeak = 0.5; // Scheitelhöhe des Sprungbogens (höher bei Teich-Querung)
+  private restT = 0; // verbleibende Ruhezeit zwischen zwei Sprüngen (nur Loop-Frösche)
   private heading = 0;
   private mixer: THREE.AnimationMixer;
+  private hopAction: THREE.AnimationAction | null;
 
   private constructor(
     readonly object: THREE.Object3D,
     clips: THREE.AnimationClip[],
     private waypoints: THREE.Vector2[],
+    private loop = false,
+    private pondCenter: THREE.Vector2 | null = null,
   ) {
     const start = waypoints[0];
     object.position.set(start.x, 0, start.y);
     this.mixer = new THREE.AnimationMixer(object);
-    const jump = makeAction(this.mixer, clips, ["jump"]) ?? makeAction(this.mixer, clips, ["idle"]);
-    jump?.play();
+    this.hopAction = makeAction(this.mixer, clips, ["jump"]) ?? makeAction(this.mixer, clips, ["idle"]);
+    this.hopAction?.play();
     this.nextHop();
   }
 
@@ -465,8 +510,44 @@ class Frog {
     return new Frog(model, clips, waypoints);
   }
 
+  /**
+   * Erzeugt einen dauerhaften Frosch, der einen zufälligen Teich umrundet und am Ufer
+   * entlanghüpft (Loop-Modus, verschwindet nicht). null, wenn kein Teich existiert.
+   */
+  static tryCreateNearPond(state: GameState, model: THREE.Object3D, clips: THREE.AnimationClip[]): Frog | null {
+    const pond = state.ponds[Math.floor(Math.random() * state.ponds.length)];
+    if (!pond) return null;
+
+    // Wegpunkte auf einer Ufer-Ellipse (außerhalb der ovalen Wasserfläche, innerhalb des
+    // Steinrings), mit zufälligem Startwinkel und zufälliger Umlaufrichtung.
+    const N = 7;
+    const start = Math.random() * Math.PI * 2;
+    const cw = Math.random() < 0.5 ? 1 : -1;
+    const waypoints: THREE.Vector2[] = [];
+    for (let i = 0; i < N; i++) {
+      const a = start + cw * (i / N) * Math.PI * 2;
+      waypoints.push(
+        new THREE.Vector2(pond.x + Math.cos(a) * BANK_RX, pond.z + Math.sin(a) * BANK_RZ),
+      );
+    }
+    return new Frog(model, clips, waypoints, true, new THREE.Vector2(pond.x, pond.z));
+  }
+
   /** Gibt true zurück, wenn der Frosch fertig ist (verschwinden). */
   update(dt: number): boolean {
+    // Ruhepause: Frosch sitzt still, Sprung-Animation pausiert. Endet die Pause,
+    // wird die Animation für den kommenden Sprung von vorn gestartet.
+    if (this.restT > 0) {
+      this.restT -= dt;
+      if (this.hopAction) this.hopAction.paused = true;
+      this.object.rotation.y = this.heading;
+      if (this.restT <= 0 && this.hopAction) {
+        this.hopAction.paused = false;
+        this.hopAction.time = 0;
+      }
+      return false;
+    }
+
     this.mixer.update(dt);
     this.hopT += dt / this.hopDur;
     if (this.hopT >= 1) {
@@ -480,30 +561,77 @@ class Frog {
     const t = this.hopT;
     this.object.position.x = THREE.MathUtils.lerp(this.hopFrom.x, this.hopTo.x, t);
     this.object.position.z = THREE.MathUtils.lerp(this.hopFrom.y, this.hopTo.y, t);
-    this.object.position.y = Math.sin(Math.PI * t) * 0.5;
+    this.object.position.y = Math.sin(Math.PI * t) * this.hopPeak;
     this.object.rotation.y = this.heading;
     return false;
   }
 
-  /** Setzt den nächsten Sprung (fester Hüpf-Abstand Richtung nächstem Wegpunkt). */
+  /** Setzt den nächsten Sprung (Hüpf-Abstand Richtung nächstem Wegpunkt). */
   private nextHop(): void {
     const pos = new THREE.Vector2(this.object.position.x, this.object.position.z);
     let target = this.waypoints[0];
     const toTarget = target.clone().sub(pos);
     if (toTarget.length() < 0.4) {
-      this.waypoints.shift();
+      const reached = this.waypoints.shift()!;
+      if (this.loop) {
+        // Gelegentlich mit hohem Bogen quer über das Wasser ans gegenüberliegende Ufer.
+        if (this.pondCenter && Math.random() < CROSS_CHANCE) {
+          this.startCrossJump(pos, reached);
+          return;
+        }
+        // Meist am Ufer weiter; gelegentlich umkehren → „hin und her" statt nur im Kreis.
+        if (Math.random() < REVERSE_CHANCE) this.waypoints.reverse();
+        this.waypoints.push(reached);
+      }
       target = this.waypoints[0] ?? target;
     }
     const dir = target.clone().sub(pos);
     const len = dir.length();
-    const hop = Math.min(1.3, len);
+    // Loop-Frösche: leicht variierende Sprungweite/-dauer + Ruhepause → entkoppelter,
+    // natürlicher Rhythmus. Straßen-Frösche queren unverändert in festem Takt.
+    const hop = Math.min(this.loop ? randFloat(0.9, 1.4) : 1.3, len);
     if (len > 1e-3) dir.multiplyScalar(hop / len);
 
     this.hopFrom.copy(pos);
     this.hopTo.copy(pos).add(dir);
     this.hopT = 0;
-    this.hopDur = 0.45;
+    this.hopDur = this.loop ? randFloat(0.4, 0.55) : 0.45;
+    this.hopPeak = 0.5;
+    // Nur manchmal eine Pause: kurze Hüpf-Folgen, dann Innehalten (wirkt wie ein echter Frosch).
+    this.restT = this.loop && Math.random() < 0.5 ? randFloat(0.4, 1.6) : 0;
     this.heading = Math.atan2(dir.x, dir.y);
+  }
+
+  /**
+   * Großer Satz quer über den Teich: zielt auf den dem aktuellen Standort
+   * gegenüberliegenden Uferpunkt (gespiegelt an der Teichmitte), mit hohem Bogen und
+   * kurzer Anlauf-Pause. Danach läuft der Frosch am neuen Ufer regulär weiter.
+   */
+  private startCrossJump(pos: THREE.Vector2, reached: THREE.Vector2): void {
+    this.waypoints.push(reached); // gerade verlassenen Punkt zurück in den Ring
+    // An der Teichmitte gespiegelter Standort → ungefähr das gegenüberliegende Ufer.
+    const mirror = this.pondCenter!.clone().multiplyScalar(2).sub(pos);
+    let bestIdx = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < this.waypoints.length; i++) {
+      const d = this.waypoints[i].distanceToSquared(mirror);
+      if (d < bestD) {
+        bestD = d;
+        bestIdx = i;
+      }
+    }
+    // Ring so rotieren, dass der gegenüberliegende Punkt vorne steht (Folge-Hüpfer laufen
+    // von dort regulär am Ufer weiter).
+    this.waypoints = this.waypoints.slice(bestIdx).concat(this.waypoints.slice(0, bestIdx));
+    const target = this.waypoints[0];
+
+    this.hopFrom.copy(pos);
+    this.hopTo.copy(target);
+    this.hopT = 0;
+    this.hopDur = randFloat(0.8, 1.1);
+    this.hopPeak = 1.5; // hoher Bogen über das Wasser
+    this.restT = randFloat(0.3, 0.8); // kurz ducken, dann abspringen
+    this.heading = Math.atan2(target.x - pos.x, target.y - pos.y);
   }
 }
 
