@@ -250,7 +250,12 @@ export class GameSession {
         onBuilding: (index, screen) => this.buildingMenu.openForBuilding(index, screen),
         onBuildingLeft: (index, screen) => {
           const defId = this.state.buildings[index]?.defId;
-          if (defId && getBuilding(defId)?.isMarket) this.marketMenu.openForMarket(index, screen);
+          if (defId && getBuilding(defId)?.isMarket) {
+            this.marketMenu.openForMarket(index, screen);
+          } else {
+            // sonst: Gebäude mit Türen (Windmühle) auf-/zuklicken
+            this.world.toggleBuildingDoors(index);
+          }
         },
         onField: (index, screen) => {
           const gained = this.state.harvestField(index);
@@ -301,7 +306,7 @@ export class GameSession {
     // liest `state.weather` für den Ertrag; außerdem schreibt der Autosave beide mit.
     this.state.timeOfDay = this.rig.sky.timeOfDay;
     this.state.weather = this.rig.weather.target;
-    this.world.update(dt, tSec, this.rig.weather.windStrength);
+    this.world.update(dt, tSec, this.rig.weather.windStrength, this.rig.sky.daylight);
     this.ambient.update(dt);
     this.critters.update(dt);
     this.birds.update(dt);

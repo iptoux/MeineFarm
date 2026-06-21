@@ -35,6 +35,12 @@ export class World {
   private fieldEntities = new Map<number, FieldEntity>();
   private buildingGroups: THREE.Group[] = [];
   private buildingMeshes: THREE.Mesh[] = [];
+  /** Animations-Mixer je Gebäude-Index (Windmühlen-Flügel/Türen). */
+  private buildingMixers: (THREE.AnimationMixer | null)[] = [];
+  /** Tür-Umschalter je Gebäude-Index (nur Gebäude mit „Door"-Clips). */
+  private doorToggles = new Map<number, () => void>();
+  /** Fenster-/Glow-Materialien aller Gebäude (Leuchten nachts). */
+  private glowMaterials: THREE.MeshStandardMaterial[] = [];
   private roadGroup = new THREE.Group();
   private roadGeo = new THREE.BoxGeometry(ROAD_TILE, 0.08, ROAD_TILE);
   private roadMats = new Map<string, THREE.MeshStandardMaterial>();
@@ -71,6 +77,9 @@ export class World {
     this.buildingGroups = [];
     this.buildingMeshes = [];
     this.roofMeshes.length = 0; // gleiche Referenz behalten (Zoom-Fade)
+    this.buildingMixers = [];
+    this.doorToggles.clear();
+    this.glowMaterials = [];
 
     for (let b = 0; b < this.state.buildings.length; b++) this.addBuildingVisuals(b);
     this.rebuildRoads();
@@ -93,6 +102,9 @@ export class World {
     this.buildingGroups = [];
     this.buildingMeshes = [];
     this.roofMeshes.length = 0;
+    this.buildingMixers = [];
+    this.doorToggles.clear();
+    this.glowMaterials = [];
     this.scene.remove(this.roadGroup);
     this.roadGroup.clear();
     this.roadGeo.dispose();
@@ -124,10 +136,13 @@ export class World {
     const pos = { x: placed.x, z: placed.z };
     const model = this.models.getBuildingModel(def.id);
     const building = model
-      ? createModelBuilding(def, pos, placed.rotation, model)
+      ? createModelBuilding(def, pos, placed.rotation, model, this.models.getBuildingClips(def.id))
       : createBuilding(def, pos, placed.rotation);
     this.scene.add(building.group);
     this.buildingGroups[buildingIndex] = building.group;
+    this.buildingMixers[buildingIndex] = building.mixer ?? null;
+    if (building.toggleDoors) this.doorToggles.set(buildingIndex, building.toggleDoors);
+    if (building.glowMaterials) this.glowMaterials.push(...building.glowMaterials);
     this.roofMeshes.push(...building.roofMeshes);
 
     building.group.traverse((o) => {
@@ -233,10 +248,20 @@ export class World {
   }
 
   /** Produktion akkumulieren und Darstellung aktualisieren. */
-  update(dt: number, tSec: number, windStrength = 1): void {
+  update(dt: number, tSec: number, windStrength = 1, daylight = 1): void {
     // Wasser-Animation (Wellen + Windreaktion).
     this.waterUniforms.uTime.value = tSec;
     this.waterUniforms.uWind.value = windStrength;
+
+    // Gebäude-Animationen (Windmühlen-Flügel/Flagge/Türen).
+    for (const m of this.buildingMixers) m?.update(dt);
+
+    // Fenster leuchten in der Dämmerung/Nacht (daylight 1 = Tag, 0 = Nacht).
+    if (this.glowMaterials.length > 0) {
+      const night = Math.min(Math.max((0.5 - daylight) / 0.5, 0), 1);
+      const intensity = night * 1.5;
+      for (const m of this.glowMaterials) m.emissiveIntensity = intensity;
+    }
     for (let i = 0; i < this.entities.length; i++) {
       const slot = this.state.slots[i];
       const def = slot.animalId ? getAnimal(slot.animalId) : undefined;
@@ -261,6 +286,14 @@ export class World {
     const fieldPickables: THREE.Object3D[] = [];
     for (const fe of this.fieldEntities.values()) fieldPickables.push(...fe.pickables());
     return [...this.entities.flatMap((e) => e.pickables()), ...fieldPickables, ...this.buildingMeshes];
+  }
+
+  /** Öffnet/schließt die Türen eines Gebäudes (falls es welche hat). True = behandelt. */
+  toggleBuildingDoors(buildingIndex: number): boolean {
+    const toggle = this.doorToggles.get(buildingIndex);
+    if (!toggle) return false;
+    toggle();
+    return true;
   }
 
   bubbleWorldPos(globalIndex: number): THREE.Vector3 {

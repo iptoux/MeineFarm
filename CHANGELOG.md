@@ -7,6 +7,22 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unveröffentlicht]
 
+### Hinzugefügt
+
+- Neues dekoratives Gebäude **Windmühle** (`Windmill.glb`, in Blender im Low-Poly-
+  Stil der Scheunen modelliert, gleiche Material-Palette). Bringt erstmals
+  **animierte Gebäude** ins Spiel: die Flügel drehen sich dauerhaft (über eine
+  sichtbare Windwelle/Achse mit dem Turm verbunden), die Flagge weht, und ein
+  **Linksklick öffnet/schließt die Bogen-Doppeltür** (Mixer spielt den
+  `DoorOpen`-Clip vor- bzw. rückwärts). Der Turm ist **innen hohl** (Holzboden,
+  Getreidesäcke, Mühlstein) und durch die offene Tür einsehbar; die Türöffnung
+  ist sauber durch den Sockelring geschnitten. Im oberen Bereich sitzen zwei
+  Fachwerk-Fenster, deren Scheiben in der Dämmerung/Nacht warm leuchten
+  (`WindowGlow`-Material; `World.update` regelt `emissiveIntensity` anhand von
+  `sky.daylight`). Gebäude-Animations-Clips werden jetzt in `AnimalModels` geladen
+  und je Gebäude-Instanz über einen eigenen `THREE.AnimationMixer`
+  (in `World.update`) abgespielt.
+
 ### Geändert
 
 - Hof-Kulisse (`farm-ambience.mp3`) ist jetzt **positional**: sie hängt als eine

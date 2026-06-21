@@ -7,6 +7,12 @@ export interface Building {
   slotPositions: THREE.Vector3[];
   /** Dach-Platten — können beim Nah-Zoomen ausgeblendet werden. */
   roofMeshes: THREE.Mesh[];
+  /** Animations-Mixer (falls das Modell Clips hat) — pro Frame zu aktualisieren. */
+  mixer?: THREE.AnimationMixer;
+  /** Öffnet/schließt die Türen (falls das Modell „Door"-Clips hat). */
+  toggleDoors?: () => void;
+  /** „Glow"-Materialien (z.B. Fensterscheiben), deren Leuchten nachts hochgeregelt wird. */
+  glowMaterials?: THREE.MeshStandardMaterial[];
 }
 
 export const FLOOR_TOP_Y = 0.3;
@@ -93,13 +99,19 @@ export function createModelBuilding(
   pos: { x: number; z: number },
   rotation: number,
   model: THREE.Object3D,
+  clips: THREE.AnimationClip[] = [],
 ): Building {
   const group = new THREE.Group();
   group.position.set(pos.x, 0, pos.z);
   group.rotation.y = rotation;
   group.add(model);
 
+  // Animationen: „Door"-Clips sind per Klick steuerbar (einmal vor/zurück),
+  // alle übrigen (Flügel, Flagge …) laufen als Endlosschleife.
+  const { mixer, toggleDoors } = setupAnimations(model, clips);
+
   const roofMeshes: THREE.Mesh[] = [];
+  const glowMaterials: THREE.MeshStandardMaterial[] = [];
   model.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const matName = ((o.material as THREE.Material)?.name ?? "").toLowerCase();
@@ -108,6 +120,12 @@ export function createModelBuilding(
       def.roofMaterials?.some((n) => n.toLowerCase() === matName) ||
       /roof/.test(matName);
     if (isFade) roofMeshes.push(o);
+    // „Glow"-Materialien (Fensterscheiben) leuchten nachts — vom Spiel gesteuert.
+    if (/glow/.test(matName)) {
+      const m = o.material as THREE.MeshStandardMaterial;
+      m.emissiveIntensity = 0;
+      glowMaterials.push(m);
+    }
   });
 
   // Slot-Höhe auf den tatsächlichen Modell-Innenboden setzen (Modelle haben einen
@@ -122,7 +140,51 @@ export function createModelBuilding(
     if (hits.length > 0) sp.y = hits[hits.length - 1].point.y + 0.02;
   }
 
-  return { group, slotPositions, roofMeshes };
+  return { group, slotPositions, roofMeshes, mixer, toggleDoors, glowMaterials };
+}
+
+/**
+ * Baut einen AnimationMixer für ein Gebäudemodell. Clips, deren Name „door"
+ * enthält, werden als einmalige (geklemmte) Aktion vorbereitet und über
+ * `toggleDoors` vor-/rückwärts abgespielt; alle anderen laufen sofort in
+ * Endlosschleife (Windmühlen-Flügel, wehende Flagge …).
+ */
+function setupAnimations(
+  model: THREE.Object3D,
+  clips: THREE.AnimationClip[],
+): { mixer?: THREE.AnimationMixer; toggleDoors?: () => void } {
+  if (clips.length === 0) return {};
+
+  const mixer = new THREE.AnimationMixer(model);
+  const doorActions: THREE.AnimationAction[] = [];
+
+  for (const clip of clips) {
+    const action = mixer.clipAction(clip);
+    if (/door/i.test(clip.name)) {
+      action.loop = THREE.LoopOnce;
+      action.clampWhenFinished = true;
+      action.play();
+      action.paused = true; // geschlossen bei time=0, bis der Spieler klickt
+      doorActions.push(action);
+    } else {
+      action.loop = THREE.LoopRepeat;
+      action.play();
+    }
+  }
+
+  if (doorActions.length === 0) return { mixer };
+
+  let open = false;
+  const toggleDoors = (): void => {
+    open = !open;
+    for (const a of doorActions) {
+      a.paused = false;
+      a.timeScale = open ? 1 : -1;
+      a.play(); // aus dem geklemmten End-/Anfangszustand erneut anstoßen
+    }
+  };
+
+  return { mixer, toggleDoors };
 }
 
 /** Slot-Raster: 4 Spalten, Reihen = ceil(N/4), an die Grundfläche angepasst und gedreht. */

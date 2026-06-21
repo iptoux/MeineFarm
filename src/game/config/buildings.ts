@@ -116,6 +116,23 @@ export const BUILDINGS: BuildingDef[] = [
     category: "farm",
   },
   {
+    id: "windmuehle",
+    name: "Windmühle",
+    cost: 220,
+    slotCount: 0,
+    // Groß angelegt: füllt die Flügelspanne (~7) und wird dadurch hoch (~9.8),
+    // sodass die Mühle deutlich größer als Stall/Scheune wirkt.
+    width: 7,
+    depth: 7,
+    roofColor: 0x141414,
+    model: "/models/buildings/Windmill.glb",
+    // Dekorativ: Linksklick öffnet/schließt die Türen, Flügel & Flagge animieren
+    // dauerhaft. Nicht ausblenden, damit die Animationen sichtbar bleiben.
+    fadeAll: false,
+    icon: "🌬️",
+    category: "farm",
+  },
+  {
     id: "vogelscheuche",
     name: "Vogelscheuche",
     cost: 20,

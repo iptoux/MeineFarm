@@ -48,6 +48,8 @@ export class AnimalModels {
   private templates = new Map<string, THREE.Object3D>();
   private clips = new Map<string, THREE.AnimationClip[]>();
   private buildings = new Map<string, THREE.Object3D>();
+  /** Animations-Clips je Gebäude-Id (z.B. Windmühle: Flügel/Flagge/Türen). */
+  private buildingClips = new Map<string, THREE.AnimationClip[]>();
   private fieldModels = new Map<FieldStateName, THREE.Object3D>();
   /** IDs erfolgreich geladener Vogel-Modelle (für BirdManager). */
   private loadedBirds: string[] = [];
@@ -74,6 +76,7 @@ export class AnimalModels {
         try {
           const gltf = await loader.loadAsync(def.model!);
           this.buildings.set(def.id, this.normalizeBuilding(gltf.scene, def.width, def.depth, def.modelRotation ?? 0));
+          this.buildingClips.set(def.id, gltf.animations ?? []);
         } catch {
           // ohne Modell greift der Primitive-Fallback
         }
@@ -243,6 +246,11 @@ export class AnimalModels {
   /** Animations-Clips eines Tiermodells. */
   getClips(animalId: string): THREE.AnimationClip[] {
     return this.clips.get(animalId) ?? [];
+  }
+
+  /** Animations-Clips eines Gebäudemodells (z.B. Windmühlen-Flügel/Türen). */
+  getBuildingClips(id: string): THREE.AnimationClip[] {
+    return this.buildingClips.get(id) ?? [];
   }
 
   /** IDs der verfügbaren Vogel-Modelle (für die fliegende Deko-Schar). */
