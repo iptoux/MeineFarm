@@ -53,3 +53,8 @@ Original prompt: Analysiere das Project/Game. Nutze alle zur verfuegung stehende
     Schrägflächen gesetzt (45/135/225/315 → von vorne UND hinten sichtbar). Reine
     GLB-/Modell-Änderung — der generische „glow"-Sammler in `Building.ts` erfasst
     automatisch alle 4 Scheiben (kein Code-Change). Browser: 4 Glow-Fenster.
+  - Grundfläche kleiner als der Stall: Turm im Modell **deutlich dicker** (Basis-
+    Radius 1.6→2.2 → Basis-Durchmesser ~4.4) und Config-Grundfläche 7→11×11.
+    Ergebnis (im Browser gegen die Scheunen verifiziert): Grundfläche 11×11
+    (> Stall 10×10), Turm-Basis ~8.5, Höhe ~15.36 → die Mühle ist jetzt das
+    höchste Gebäude (über Big Barn 13.43). Tür/Fenster/Flügel mitskaliert.

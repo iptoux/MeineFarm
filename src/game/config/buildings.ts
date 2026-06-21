@@ -118,12 +118,13 @@ export const BUILDINGS: BuildingDef[] = [
   {
     id: "windmuehle",
     name: "Windmühle",
-    cost: 220,
+    cost: 280,
     slotCount: 0,
-    // Groß angelegt: füllt die Flügelspanne (~7) und wird dadurch hoch (~9.8),
-    // sodass die Mühle deutlich größer als Stall/Scheune wirkt.
-    width: 7,
-    depth: 7,
+    // Großzügig dimensioniert: Grundfläche 11×11 (größer als der Stall mit 10),
+    // dicker Turm (Basis ~8.5) und hoch (~15.4) — die Mühle ist das markanteste
+    // Gebäude und überragt Stall & Scheune.
+    width: 11,
+    depth: 11,
     roofColor: 0x141414,
     model: "/models/buildings/Windmill.glb",
     // Dekorativ: Linksklick öffnet/schließt die Türen, Flügel & Flagge animieren
