@@ -73,6 +73,35 @@ Datengetrieben — meist ein Katalog-Eintrag (Checkliste docs §17):
 - **Deko-Critter** (Hund/Frosch): GLB + Eintrag in `DECOR` (`AnimalModels.ts`),
   Bewegung/Animation im `CritterManager` (docs §19).
 
+## Eigene Blender-Modelle bauen (docs §23 — Vollreferenz)
+Für neue, **stilkonforme** Modelle (z.B. die animierte **Windmühle**) prozedural in
+Blender bauen. Kernpunkte:
+- **Verbindung:** BlenderMCP-Addon-Socket `127.0.0.1:9876` (JSON `execute_code`); funktioniert
+  auch ohne registrierten MCP-Server, solange Blender mit „Connect" läuft. Stil eines
+  vorhandenen GLB vorab auslesen (Material-Farben, Bounding-Box).
+- **Art-Stil:** flat low-poly (`use_smooth=False`, roughness ~0.9, metallic 0), feste
+  **Scheunen-Palette** (lineare Werte in docs §23.2: DarkRed/LightRed/White/RoofBlack/
+  Wood/Wood_Light). Plankige Wände = schmale erhabene **vertikale Leisten**; Dach =
+  gestapelte **Schindel-Ringe**; **weiße** Zierbänder + **weiße Fensterrahmen**.
+- **Koordinaten:** Front nach **Blender −Y** bauen → Spiel-Front **+Z**. Export GLB mit
+  `export_yup=True, export_animation_mode='ACTIONS', export_force_sampling=True`.
+- **GRÖSSE/Skalierung:** `normalizeBuilding` skaliert mit `min(width/sizeX, depth/sizeZ)` —
+  die **breiteste Auskragung bestimmt den Maßstab** (Flügelspanne!). Höher/größer ⇒
+  **Modell-Proportionen** ändern (Turm dicker/höher), **nicht nur** `width/depth`.
+  In-Game-Höhe ≈ `blenderHöhe · width/sizeX`. Endmaße: Windmühle ~15.36/11×11,
+  Open Barn ~7.67/10, Big Barn ~13.43/14.
+- **Animationen (automatisch):** GLB-Clips → `AnimalModels.getBuildingClips` →
+  `Building.setupAnimations` (Mixer pro Instanz) → `World.update` treibt sie. Clip-Name
+  mit **„door"** = per-Klick-Toggle (`onBuildingLeft`), sonst Endlos-Loop. Eine Action
+  **pro Objekt** = ein Clip pro Objekt; Türen am **Scharnier**-Ursprung, bei schrägen
+  Wänden kippen + in den Wand-Tunnel zurückversetzen (Kippung in alle Keyframes backen).
+- **Nacht-Glow (Fenster):** Material-Name enthält **„glow"** + Emission → `Building.ts`
+  sammelt sie, `World.update(…, sky.daylight)` regelt `emissiveIntensity`
+  (`clamp((0.5−daylight)/0.5,0,1)·1.5`). Beliebig viele Glow-Meshes, kein Code-Change.
+- **Stolperstein:** Kind-Objekte bekommen lokal `(0,0,0)` (nie zusätzlich Welt-`location`,
+  sonst Doppel-Offset). Modifier kontext-sicher anwenden via `new_from_object` (nicht
+  `modifier_apply`). Immer **mehrere Render-Winkel** + GLB-Parse + Browser-Load prüfen.
+
 ## Verifikation (Pflicht bei sichtbaren Änderungen)
 Kein UI-Testrunner — per **Playwright-Screenshot** prüfen. Im Dev-Build:
 `window.__game = { rig, sceneManager, sky, grass, get session() }`.

@@ -723,3 +723,111 @@ Wind-Shader ([wind.ts](../src/scene/wind.ts)).
 - **Animation:** Bewegung und Puls passieren im Vertex-/Fragment-Shader aus
   stabilen Attributen (`aPhase`, `aSize`, `aLift`, `aTone`) statt per CPU-Update
   pro Partikel.
+
+## 23. Blender: Gebäude-Modelle prozedural erstellen (gelernt)
+
+Eigene Low-Poly-Modelle (z.B. die **Windmühle**, `public/models/buildings/Windmill.glb`)
+werden per Skript in Blender gebaut, damit sie zur Poly-Pizza-Optik der gekauften
+Scheunen passen. Diese Sektion fasst den kompletten Workflow + alle Stolpersteine zusammen.
+
+### 23.1 Verbindung zu Blender (BlenderMCP)
+- Das **BlenderMCP-Addon** lauscht auf **`127.0.0.1:9876`** (JSON-über-TCP). Ist der
+  MCP-Server nicht in der Session registriert, aber Blender läuft mit „Connect", kann
+  man direkt mit dem Socket sprechen — Protokoll: `{"type":"execute_code","params":{"code":"…"}}`,
+  Antwort `{"status":"success","result":{…}}`. Weitere Typen: `get_scene_info`,
+  `get_object_info`, `get_viewport_screenshot`.
+- Praktisch: ein kleiner Python-Client schickt `execute_code` mit dem Inhalt einer
+  `.py`-Datei. Build/Inspect/Render/Export sind alles separate `execute_code`-Aufrufe.
+- **Stil der vorhandenen GLBs vorab abkupfern:** GLB importieren, Material-`Base Color`,
+  `roughness`/`metallic`, Bounding-Box und Mesh-Namen auslesen, wieder löschen.
+
+### 23.2 Art-Stil & Palette (Scheunen-Look)
+- **Flat low-poly:** alle Polygone `use_smooth = False`, Principled BSDF mit
+  **roughness ≈ 0.9, metallic 0**. Keine Texturen — nur flache `Base Color`-Materialien.
+- **Palette (lineare Werte, exakt wie Open/Big Barn — direkt als `default_value` setzen,
+  glTF exportiert sie als `baseColorFactor`):**
+  - `DarkRed` `(0.202, 0.043, 0.032)` · `LightRed` `(0.274, 0.056, 0.042)`
+  - `White` `(0.640, 0.640, 0.640)` · `RoofBlack` `(0.079, 0.079, 0.079)`
+  - `Wood` `(0.246, 0.144, 0.054)` · `Wood_Light` `(0.376, 0.243, 0.097)`
+- **Wände wirken plankig** durch viele schmale, leicht erhabene **vertikale Leisten**
+  (LightRed auf DarkRed) auf den Achteck-Facetten; **Dach** = gestapelte, leicht
+  hervorstehende **Schindel-Ringe** (RoofBlack/RoofBlack2) statt glattem Kegel.
+- **Weiße Zierbänder** (Sockel/Mitte/oben) und **weiße Fensterrahmen** sind Pflicht-
+  Stilmerkmale (matchen die Scheunen).
+
+### 23.3 Koordinaten & glTF-Export
+- Blender ist **Z-up**, glTF **Y-up**. Konvertierung beim Export: `three.X=Blender.X`,
+  `three.Y=Blender.Z`, `three.Z=−Blender.Y`.
+- **Front (offene/Tür-Seite) im Modell nach Blender −Y bauen** → zeigt im Spiel nach
+  **+Z** (Slot-Front, siehe §3); dann ist meist keine `modelRotation` nötig.
+- Türen schwingen um **Blender-Z** (= vertikale three-Y-Achse). Flügel-Nabe (Windmühle)
+  rotiert um **Blender-Y**.
+- Export: `bpy.ops.export_scene.gltf(export_format='GLB', export_yup=True,
+  export_apply=False, export_animations=True, export_animation_mode='ACTIONS',
+  export_force_sampling=True)`. Preview-Kamera/Licht vorher löschen.
+
+### 23.4 Größe & Skalierung (WICHTIG — häufige Verwirrung)
+`normalizeBuilding` (§13) skaliert **uniform** mit `min(width/sizeX, depth/sizeZ)`, wobei
+`sizeX/sizeZ` die **Bounding-Box** des Modells sind. Folgen:
+- Eine **weit auskragende Komponente bestimmt den Maßstab** (bei der Windmühle die
+  Flügelspanne in X). Dann bleibt der Turm relativ klein/niedrig, egal wie groß `width`.
+- **In-Game-Höhe ≈ `blenderHöhe · width / sizeX`** (wenn `width` die Skalierung bestimmt),
+  **Boden-Durchmesser ≈ `modellBasis · width / sizeX`**.
+- Zum **Vergrößern/Höher-/Breiter-Machen** also **die Modell-Proportionen** ändern
+  (Turm dicker/höher), **nicht nur** `width/depth` erhöhen — sonst wachsen nur die Flügel.
+- **Referenz-Endmaße** (im Browser mit gleicher Formel gemessen):
+  Open Barn ~7.67 hoch / 10×10 · Big Barn ~13.43 / 14×14 · **Windmühle ~15.36 / 11×11**
+  (dicker Turm Basis-Ø ~8.5; höchstes Gebäude).
+
+### 23.5 Gebäude-Animationen (Mixer pro Instanz)
+Pipeline: `AnimalModels.load()` speichert `gltf.animations` je Gebäude-Id
+(`getBuildingClips`). [Building.ts](../src/scene/Building.ts) `setupAnimations()` baut
+**pro Instanz** einen `THREE.AnimationMixer`; [World.ts](../src/scene/World.ts) hält die
+Mixer je Gebäude-Index und ruft `mixer.update(dt)` in `World.update`.
+- **Clip-Namens-Konvention:** Clips mit **„door"** im Namen → einmalige, geklemmte
+  Aktion (`LoopOnce` + `clampWhenFinished`), per Klick vor-/rückwärts (`toggleDoors`,
+  ausgelöst über `onBuildingLeft` in `GameSession`). Alle anderen Clips → `LoopRepeat`
+  (Flügel, Flagge …). **Neue Animationen funktionieren automatisch**, sobald das GLB
+  Clips enthält — kein weiterer Code nötig.
+- **Pro Objekt eine eigene Action** → der `ACTIONS`-Export erzeugt **einen Clip pro
+  Objekt** (z.B. `DoorOpenL`/`DoorOpenR`, `SailSpin`, `FlagWave`). Tracks zeigen per
+  **Objektname** ins GLB; `clone(true)` erhält die Namen → Mixer am Klon funktioniert.
+- **Türen:** Objekt-Ursprung **am Scharnier** (lokale x=0-Kante). Bei verjüngten Wänden
+  die Tür **um die Wandneigung kippen** (konstante `rotation_euler.x`) **und in den
+  Wand-Tunnel zurückversetzen**, sonst steht sie heraus oder zeigt Sichtlücken. Die
+  konstante Kippung in **alle Euler-Keyframes** mit-keyframen (sonst geht sie beim
+  Export/Abspielen verloren).
+- **Blender 4.4+ Action-API:** `action.fcurves` gibt es nicht mehr — F-Curves liegen
+  unter `action.layers[*].strips[*].channelbag(obj.animation_data.action_slot).fcurves`.
+  `obj.keyframe_insert(...)` funktioniert weiterhin versions-übergreifend.
+
+### 23.6 Hohle Innenräume & Öffnungen (Boolean)
+- Turm **hohl**: innere Kavität als kleineren Kegel **subtrahieren**; Türöffnung als
+  extrudiertes **Bogen-Profil** durch Wand **und** Sockelring schneiden (Boolean an
+  beide Objekte). Boolean-Solver **`EXACT`**.
+- **Modifier anwenden kontext-sicher:** statt `bpy.ops.object.modifier_apply` das
+  ausgewertete Mesh backen — `obj.data = bpy.data.meshes.new_from_object(obj.evaluated_get(depsgraph))`,
+  dann `obj.modifiers.clear()`. (Ops brauchen oft den richtigen UI-Kontext.)
+- Innenraum sichtbar machen: Holzboden + ein paar Props (Säcke, Mühlstein) hinter der Tür.
+
+### 23.7 Fenster-Nacht-Leuchten
+- Glasscheibe bekommt ein Material, dessen **Name „glow" enthält** (`WindowGlow`), mit
+  **Emission** (Principled „Emission Color/Strength" → glTF `emissiveFactor`, z.B. warmes
+  `[1, 0.72, 0.30]`).
+- [Building.ts](../src/scene/Building.ts) sammelt alle `*/glow/*`-Materialien
+  (`emissiveIntensity = 0`); [World.ts](../src/scene/World.ts) `update(dt,tSec,wind,daylight)`
+  setzt `emissiveIntensity = clamp((0.5 − daylight)/0.5, 0, 1) · 1.5`;
+  [GameSession.ts](../src/game/GameSession.ts) reicht `sky.daylight` durch (1=Tag, 0=Nacht).
+  → Tag aus, Dämmerung/Nacht leuchtend. **Beliebig viele** Glow-Meshes werden generisch
+  erfasst (kein Code-Change bei mehr Fenstern).
+
+### 23.8 Stolpersteine
+1. **Kind-Objekt-Doppel-Offset:** Einem Kind **nicht** zusätzlich eine Welt-`location`
+   geben, wenn das Eltern-Objekt schon dort sitzt — Kinder bekommen lokal `(0,0,0)`
+   (Geometrie ist bereits im Eltern-Frame). Sonst schwebt das Teil weg.
+2. **Verifikation immer aus mehreren Winkeln** rendern (Front/3-4/Seite/Rück/offen +
+   Tür-Nahaufnahme) und zusätzlich das GLB prüfen: JSON-Chunk parsen (Clips/Knoten/
+   Materialien) **und** im Browser via `GLTFLoader` laden (Clips, `emissive`, finale
+   Größe über die `normalizeBuilding`-Formel).
+3. Größen-/Höhen-„zu klein"-Reklamationen kommen fast immer aus §23.4 (Auskragung
+   bestimmt den Maßstab) — Modell-Proportion ändern, nicht nur `width`.
