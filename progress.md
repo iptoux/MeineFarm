@@ -58,3 +58,8 @@ Original prompt: Analysiere das Project/Game. Nutze alle zur verfuegung stehende
     Ergebnis (im Browser gegen die Scheunen verifiziert): Grundfläche 11×11
     (> Stall 10×10), Turm-Basis ~8.5, Höhe ~15.36 → die Mühle ist jetzt das
     höchste Gebäude (über Big Barn 13.43). Tür/Fenster/Flügel mitskaliert.
+  - Fensterrahmen + Sprossen auf **White** umgestellt (wie die anderen Gebäude).
+- **Skill/Doku:** Gesamtes Blender-/Modell-Wissen dokumentiert — neue Sektion
+  `docs/DEVELOPMENT.md` §23 (BlenderMCP-Workflow, Art-Palette, Z-up→Y-up, Größen-
+  Kopplung, Gebäude-Animationen, hohle Innenräume/Booleans, Nacht-Glow, Stolpersteine)
+  + kompakte Zusammenfassung im Skill `.agents/skills/meinhaustier/SKILL.md`.
