@@ -35,6 +35,7 @@ src/
     Trees.ts              # Zufällig verteilte Bäume (instanziert, Wind, Belegungs-Culling, seeded) (Rig)
     Sky.ts                # SkyManager: atmosphärischer Himmel + Tag/Nacht-Zyklus + Sterne (+ daylight)
     Clouds.ts             # CloudManager: ziehende Low-Poly-Wolken + weiche Bodenschatten (Rig)
+    Fireflies.ts          # Nacht-Gluehwuermchen (Points-Shader, feld-/wetterabhaengig) (Rig)
     Weather.ts            # WeatherManager: Wetterlagen (clear/rain/storm/fog) + windStrength (Rig)
     Building.ts           # createBuilding (Primitive) + createModelBuilding (glTF)
     AnimalModels.ts       # Lädt/normalisiert alle glTF-Modelle (Tiere, Deko-Critter, Gebäude, UI, Herz)
@@ -75,8 +76,8 @@ Die App trennt **persistente Infrastruktur** von einem **austauschbaren Spiel**:
 
 - **Rig** (in [main.ts](../src/main.ts) einmalig erzeugt, lebt für die ganze
   Seitensitzung): `SceneManager`, `AnimalModels`, `Grass`, `Trees`, `CoinBurst`,
-  `AudioManager` — plus `SkyManager`, `WeatherManager`, `CloudManager` und
-  `DayNightHud`. Boden, Gras, Bäume, Licht und Himmel hängen dauerhaft in der
+  `AudioManager` — plus `SkyManager`, `WeatherManager`, `CloudManager`,
+  `Fireflies` und `DayNightHud`. Boden, Gras, Bäume, Licht und Himmel hängen dauerhaft in der
   Szene. Hier läuft auch die **einzige** Render-/Update-Schleife
   ([Game.ts](../src/game/Game.ts)).
 - **GameSession** ([GameSession.ts](../src/game/GameSession.ts)): ein konkreter
@@ -97,6 +98,8 @@ Die App trennt **persistente Infrastruktur** von einem **austauschbaren Spiel**:
 `trees.update(tSec, weather.windStrength)` (beide wiegen wetterabhängig im Wind,
 §9/§21), `sky.update(dt)` (Tag/Nacht), `weather.update(...)`,
 `clouds.update(dt, sky.daylight, sky.sunDir)` (Wolken/Schatten),
+`fireflies.update(dt,tSec, sky.daylight, weather.target, weather.windStrength)`
+(nächtliche Glow-Partikel, §22),
 `dayNight.update(sky.timeOfDay)`. `session.update` selbst tickt Produktion
 (`world.update`), die Hintergrund-Rufe (`ambient.update`) **und** die Deko-Critter
 (`critters.update`, inkl. Herzen-Effekt).
@@ -351,7 +354,9 @@ Wichtige Details (zwei behobene Bugs, nicht regressen lassen):
   Opazität blendet nachts ein.
 - **`daylight ∈ [0,1]`**: in `apply()` mitgesetzter Tageslicht-Faktor (0 = Nacht,
   1 = heller Tag). Wird in der Loop an `clouds.update(dt, sky.daylight)` gegeben, um
-  die Wolkenschatten tagsüber ein- und nachts auszublenden (**§20**).
+  die Wolkenschatten tagsüber ein- und nachts auszublenden (**§20**) und an
+  `fireflies.update(...)`, damit die Gluehwuermchen erst in Daemmerung/Nacht
+  sichtbar werden (**§22**).
 - **HUD**: Phasen-Emoji (🌅 ☀️ 🌇 🌙) + Uhrzeit `HH:MM` + Farbverlaufs-Balken mit
   Marker (`#daynight` in [index.html](../index.html)/[styles.css](../src/ui/styles.css)).
 
@@ -478,10 +483,10 @@ und einem **Dev-Debug-Hook**. In [main.ts](../src/main.ts) wird unter
 `import.meta.env.DEV` gesetzt:
 
 ```js
-window.__game = { rig, sceneManager, sky, weather, grass, trees, ground, clouds, get session() }
+window.__game = { rig, sceneManager, sky, weather, grass, trees, ground, clouds, fireflies, get session() }
 ```
 
-`rig` = `{ sceneManager, models, grass, trees, ground, clouds, sky, weather,
+`rig` = `{ sceneManager, models, grass, trees, ground, clouds, fireflies, sky, weather,
 coinBurst, audio }`. **State und World liegen jetzt unter der Session**:
 `__game.session.state`, `__game.session.world`. Es muss zuerst ein Spiel laufen
 (Startmenü!), sonst ist `session` `null`. Wetter zum Testen forcieren:
@@ -698,3 +703,23 @@ Wind-Shader ([wind.ts](../src/scene/wind.ts)).
 
 > Stellschrauben oben in der Datei: `TREE_HEIGHT`, `BASE_COUNT`/`CAP` (Dichte/Deckel),
 > `LEAF_AMP` (Wind-Amplitude der Krone), `TRUNK_RADIUS` (Belegungs-Footprint).
+
+---
+
+## 22. Gluehwuermchen (Nacht-Atmosphaere)
+
+[Fireflies.ts](../src/scene/Fireflies.ts), einmalig als Rig-System in
+[main.ts](../src/main.ts) erzeugt. Es rendert alle Gluehwuermchen in **einem**
+`THREE.Points`-Draw-Call mit `ShaderMaterial`:
+
+- **Feld-Sync:** `GameSession.applyField()` ruft `fireflies.rebuildForField(f)`.
+  Die Partikel werden deterministisch aus der Feldgroesse verteilt und wachsen bei
+  Erweiterungen mit (`BASE_COUNT`/`CAP` oben in der Datei).
+- **Tageszeit:** `update(dt,tSec, sky.daylight, weather.target, windStrength)`
+  blendet erst in Daemmerung/Nacht ein; tagsueber sind die Punkte unsichtbar.
+- **Wetter:** klar = volle Dichte, Nebel = gedimmt, Regen/Gewitter = fast weg.
+  Starker Wind reduziert die Deckkraft, damit der Effekt bei Sturm nicht unruhig
+  wirkt.
+- **Animation:** Bewegung und Puls passieren im Vertex-/Fragment-Shader aus
+  stabilen Attributen (`aPhase`, `aSize`, `aLift`, `aTone`) statt per CPU-Update
+  pro Partikel.

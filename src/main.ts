@@ -12,6 +12,7 @@ import { WeatherManager } from "./scene/Weather";
 import { AnimalModels } from "./scene/AnimalModels";
 import { renderIcon } from "./scene/IconRenderer";
 import { CoinBurst } from "./scene/CoinBurst";
+import { Fireflies } from "./scene/Fireflies";
 
 import { Game } from "./game/Game";
 import { GameSession, type Rig } from "./game/GameSession";
@@ -52,6 +53,8 @@ async function init(): Promise<void> {
   // Im Menü (ohne Session) Schatten aufs Startfeld begrenzen – sonst „schweben"
   // Wolkenschatten über dem leeren Void am Horizont.
   clouds.setBounds(INITIAL_FIELD);
+  const fireflies = new Fireflies();
+  sceneManager.scene.add(fireflies.object);
 
   // Animiertes Wind-Gras (prozeduraler Teppich + GLB-Büschel)
   const grass = await createGrass();
@@ -104,7 +107,7 @@ async function init(): Promise<void> {
     muteBtn.textContent = audio.toggleMute() ? "🔇" : "🔊";
   });
 
-  const rig: Rig = { sceneManager, models, grass, trees, ground, clouds, sky, weather, coinBurst, audio };
+  const rig: Rig = { sceneManager, models, grass, trees, ground, clouds, fireflies, sky, weather, coinBurst, audio };
 
   // --- Spiel-Session + Startmenü ---
   let session: GameSession | null = null;
@@ -141,6 +144,7 @@ async function init(): Promise<void> {
     sky.update(dt);
     weather.update(dt, sky.timeOfDay, sky.daylight);
     clouds.update(dt, sky.daylight, sky.sunDir);
+    fireflies.update(dt, tSec, sky.daylight, weather.target, weather.windStrength);
     rain.update(dt);
     dayNight.update(sky.timeOfDay);
     dayNight.setWeather(weather.target);
@@ -157,6 +161,7 @@ async function init(): Promise<void> {
       trees,
       ground,
       clouds,
+      fireflies,
       get session() {
         return session;
       },

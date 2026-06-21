@@ -4,6 +4,7 @@ import type { Grass } from "../scene/Grass";
 import type { Trees } from "../scene/Trees";
 import type { Ground } from "../scene/Ground";
 import type { CloudManager } from "../scene/Clouds";
+import type { Fireflies } from "../scene/Fireflies";
 import type { SkyManager } from "../scene/Sky";
 import { type WeatherManager, type WeatherKind, WEATHER_KINDS } from "../scene/Weather";
 import { CoinBurst } from "../scene/CoinBurst";
@@ -42,6 +43,7 @@ export interface Rig {
   trees: Trees;
   ground: Ground;
   clouds: CloudManager;
+  fireflies: Fireflies;
   sky: SkyManager;
   weather: WeatherManager;
   coinBurst: CoinBurst;
@@ -288,6 +290,7 @@ export class GameSession {
     this.world.rebuildPonds(); // neue Teiche (z.B. nach Erweiterung) darstellen
     this.world.cullGrass(); // Belegung nach Gras-/Baum-Rebuild neu anwenden
     this.rig.clouds.setBounds(f);
+    this.rig.fireflies.rebuildForField(f);
     this.fieldExpansion.reposition(f);
     this.rig.sceneManager.setPanBounds(f);
   }
