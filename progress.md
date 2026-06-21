@@ -49,3 +49,7 @@ Original prompt: Analysiere das Project/Game. Nutze alle zur verfuegung stehende
     flach). Statt breiter → **Turm im Modell höher/schlanker** (H 4.0→5.4, Aspekt
     H/Breite 1.40→1.68); In-Game-Höhe nun ~11.73 (vs. Open Barn 7.67, Big Barn
     13.43) — im Browser gegen die Scheunen verifiziert.
+  - Fenster proportional vergrößert (~0.60×0.80) und symmetrisch auf alle vier
+    Schrägflächen gesetzt (45/135/225/315 → von vorne UND hinten sichtbar). Reine
+    GLB-/Modell-Änderung — der generische „glow"-Sammler in `Building.ts` erfasst
+    automatisch alle 4 Scheiben (kein Code-Change). Browser: 4 Glow-Fenster.
